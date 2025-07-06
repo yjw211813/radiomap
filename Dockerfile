@@ -20,51 +20,24 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
     wget \
     python3-pip \
+    python3-dev \
     nano \
     git \
     openssh-server \
-    openssh-client
+    openssh-client \
+    # 添加matplotlib需要的系统依赖
+    libgl1-mesa-glx \
+    libglib2.0-0
 
-# ================= 安装Miniconda =================
-# 下载Miniconda安装脚本 (使用清华镜像源)
-RUN wget https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/Miniconda3-py310_24.1.2-0-Linux-x86_64.sh -O ~/miniconda.sh
+# 配置pip清华源
+RUN pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 安装Miniconda
-RUN bash ~/miniconda.sh -b -p /opt/conda && \
-    rm ~/miniconda.sh
-
-# 将conda加入PATH
-ENV PATH=/opt/conda/bin:$PATH
-
-# 配置conda清华源
-RUN conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/ && \
-    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/ && \
-    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/ && \
-    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/ && \
-    conda config --set show_channel_urls yes
-
-# ================= 创建conda虚拟环境 =================
-RUN conda create -n liaozhengyan python=3.12 -y && \
-    echo "conda activate liaozhengyan" >> ~/.bashrc
-
-# 激活环境并配置pip清华源
-SHELL ["/bin/bash", "--login", "-c"]
-RUN conda init bash && \
-    source activate liaozhengyan && \
-    pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-
-# ================= 在虚拟环境中安装PyTorch和依赖 =================
-# 方法1：使用pip直接安装PyTorch (推荐)
-RUN source activate liaozhengyan && \
-    pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-
-# 方法2：或者使用conda安装PyTorch (二选一)
-# RUN source activate liaozhengyan && \
-#     conda install -y pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 pytorch-cuda=12.1 -c pytorch -c nvidia
+# ================= 安装PyTorch和依赖 =================
+# 使用pip直接安装PyTorch
+RUN pip3 install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
 # 安装其他Python包
-RUN source activate liaozhengyan && \
-    pip install --no-cache-dir \
+RUN pip3 install --no-cache-dir \
     accelerate \
     einops \
     ema-pytorch \
@@ -77,7 +50,12 @@ RUN source activate liaozhengyan && \
     fvcore \
     albumentations \
     omegaconf \
-    numpy
+    numpy \
+    pandas \
+    scikit-image \
+    matplotlib \
+    wandb \
+    torchsummary
 
 # ================= 配置SSH =================
 RUN mkdir -p /run/sshd && \

@@ -511,9 +511,9 @@ class depth_conv_mixer(nn.Module):
 
 if __name__ == '__main__':
     incetion_test()
-    conv_test()
-    conv_mixer_test()
-    ghost_test()
-    Fractal_incep_test()
-    DownSamp_test()
-    test_PatchEmbedding()
+    # conv_test()
+    # conv_mixer_test()
+    # ghost_test()
+    # Fractal_incep_test()
+    # DownSamp_test()
+    # test_PatchEmbedding()

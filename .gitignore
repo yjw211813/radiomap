@@ -140,5 +140,5 @@ cython_debug/
 
 # my ignore
 /runs/
-/data/
-.idea
+/data/dataset/
+/.idea
