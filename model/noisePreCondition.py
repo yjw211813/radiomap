@@ -6,19 +6,19 @@ from torch.nn import init
 from torch.nn import functional as F
 
 
-def drop_connect(x, drop_ratio):
-    keep_ratio = 1.0 - drop_ratio
-    mask = torch.empty([x.shape[0], 1, 1, 1], dtype=x.dtype, device=x.device)
-    mask.bernoulli_(p=keep_ratio)
-    x.div_(keep_ratio  )# 4. 缩放输入以保持期望值不变
-    x.mul_(mask  )# 5. 应用掩码 - 随机将整个特征图置零
-    return x
+# def drop_connect(x, drop_ratio):
+#     keep_ratio = 1.0 - drop_ratio
+#     mask = torch.empty([x.shape[0], 1, 1, 1], dtype=x.dtype, device=x.device)
+#     mask.bernoulli_(p=keep_ratio)
+#     x.div_(keep_ratio  )# 4. 缩放输入以保持期望值不变
+#     x.mul_(mask  )# 5. 应用掩码 - 随机将整个特征图置零
+#     return x
 
 class Swish(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
 
-
+# 这个暂时不动
 class TimeEmbedding(nn.Module):
     # d_model 是频率嵌入维度
     def __init__(self, T, d_model, dim):
@@ -70,8 +70,10 @@ class ConditionalEmbedding(nn.Module):
         emb = self.condEmbedding(t)
         return emb
 
-# 下采样和上采样可以进行平替
 
+
+# 下采样和上采样可以进行平替
+# 上下采样可以进行更改
 class DownSample(nn.Module):
     def __init__(self, in_ch):
         super().__init__()
@@ -83,6 +85,7 @@ class DownSample(nn.Module):
         return x
 
 
+# 上下采样可以进行更改
 class UpSample(nn.Module):
     def __init__(self, in_ch):
         super().__init__()
@@ -103,7 +106,7 @@ class AttnBlock(nn.Module):
     def __init__(self, in_ch):
         super().__init__()
         self.group_norm = nn.GroupNorm(32, in_ch)
-        self.proj_q = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+        self.proj_q = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0) # 卷积
         self.proj_k = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
         self.proj_v = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
         self.proj = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
@@ -172,94 +175,91 @@ class ResBlock(nn.Module):
         h = h + self.shortcut(x)
         h = self.attn(h)
         return h
+#
+#
+# class UNet(nn.Module):
+#     def __init__(self, T, num_labels, ch, ch_mult, num_res_blocks, dropout):
+#         super().__init__()
+#         tdim = ch * 4
+#         self.time_embedding = TimeEmbedding(T, ch, tdim)
+#         self.cond_embedding = ConditionalEmbedding(num_labels, ch, tdim)
+#         self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
+#         self.downblocks = nn.ModuleList()
+#         chs = [ch]  # record output channel when dowmsample for upsample
+#         now_ch = ch
+#         for i, mult in enumerate(ch_mult):
+#             out_ch = ch * mult
+#             for _ in range(num_res_blocks):
+#                 self.downblocks.append(ResBlock(in_ch=now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout))
+#                 now_ch = out_ch
+#                 chs.append(now_ch)
+#             if i != len(ch_mult) - 1:
+#                 self.downblocks.append(DownSample(now_ch))
+#                 chs.append(now_ch)
+#
+#         self.middleblocks = nn.ModuleList([
+#             ResBlock(now_ch, now_ch, tdim, dropout, attn=True),
+#             ResBlock(now_ch, now_ch, tdim, dropout, attn=False),
+#         ])
+#
+#         self.upblocks = nn.ModuleList()
+#         for i, mult in reversed(list(enumerate(ch_mult))):
+#             out_ch = ch * mult
+#             for _ in range(num_res_blocks + 1):
+#                 self.upblocks.append \
+#                     (ResBlock(in_ch=chs.pop() + now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout, attn=False))
+#                 now_ch = out_ch
+#             if i != 0:
+#                 self.upblocks.append(UpSample(now_ch))
+#         assert len(chs) == 0
+#
+#         self.tail = nn.Sequential(
+#             nn.GroupNorm(32, now_ch),
+#             Swish(),
+#             nn.Conv2d(now_ch, 3, 3, stride=1, padding=1)
+#         )
+#
+#
+#     def forward(self, x, t, labels):
+#         # Timestep embedding
+#         temb = self.time_embedding(t)
+#         cemb = self.cond_embedding(labels)
+#         # Downsampling
+#         h = self.head(x)
+#         hs = [h]
+#         for layer in self.downblocks:
+#             h = layer(h, temb, cemb)
+#             hs.append(h)
+#         # Middle
+#         for layer in self.middleblocks:
+#             h = layer(h, temb, cemb)
+#         # Upsampling
+#         for layer in self.upblocks:
+#             if isinstance(layer, ResBlock):
+#                 h = torch.cat([h, hs.pop()], dim=1)
+#             h = layer(h, temb, cemb)
+#         h = self.tail(h)
+#
+#         assert len(hs) == 0
+#         return h
+#
+# def UNet_example():
+#     batch_size = 8
+#     model = UNet(
+#         T=1000, num_labels=10, ch=128, ch_mult=[1, 2, 2, 2],
+#         num_res_blocks=2, dropout=0.1)
+#     x = torch.randn(batch_size, 3, 32, 32)
+#     t = torch.randint(1000, size=[batch_size])
+#     labels = torch.randint(10, size=[batch_size])
+#     # resB = ResBlock(128, 256, 64, 0.1)
+#     # x = torch.randn(batch_size, 128, 32, 32)
+#     # t = torch.randn(batch_size, 64)
+#     # labels = torch.randn(batch_size, 64)
+#     # y = resB(x, t, labels)
+#     y = model(x, t, labels)
+#     print(y.shape)
 
-
-class UNet(nn.Module):
-    def __init__(self, T, num_labels, ch, ch_mult, num_res_blocks, dropout):
-        super().__init__()
-        tdim = ch * 4
-        self.time_embedding = TimeEmbedding(T, ch, tdim)
-        self.cond_embedding = ConditionalEmbedding(num_labels, ch, tdim)
-        self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
-        self.downblocks = nn.ModuleList()
-        chs = [ch]  # record output channel when dowmsample for upsample
-        now_ch = ch
-        for i, mult in enumerate(ch_mult):
-            out_ch = ch * mult
-            for _ in range(num_res_blocks):
-                self.downblocks.append(ResBlock(in_ch=now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout))
-                now_ch = out_ch
-                chs.append(now_ch)
-            if i != len(ch_mult) - 1:
-                self.downblocks.append(DownSample(now_ch))
-                chs.append(now_ch)
-
-        self.middleblocks = nn.ModuleList([
-            ResBlock(now_ch, now_ch, tdim, dropout, attn=True),
-            ResBlock(now_ch, now_ch, tdim, dropout, attn=False),
-        ])
-
-        self.upblocks = nn.ModuleList()
-        for i, mult in reversed(list(enumerate(ch_mult))):
-            out_ch = ch * mult
-            for _ in range(num_res_blocks + 1):
-                self.upblocks.append \
-                    (ResBlock(in_ch=chs.pop() + now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout, attn=False))
-                now_ch = out_ch
-            if i != 0:
-                self.upblocks.append(UpSample(now_ch))
-        assert len(chs) == 0
-
-        self.tail = nn.Sequential(
-            nn.GroupNorm(32, now_ch),
-            Swish(),
-            nn.Conv2d(now_ch, 3, 3, stride=1, padding=1)
-        )
-
-
-    def forward(self, x, t, labels):
-        # Timestep embedding
-        temb = self.time_embedding(t)
-        cemb = self.cond_embedding(labels)
-        # Downsampling
-        h = self.head(x)
-        hs = [h]
-        for layer in self.downblocks:
-            h = layer(h, temb, cemb)
-            hs.append(h)
-        # Middle
-        for layer in self.middleblocks:
-            h = layer(h, temb, cemb)
-        # Upsampling
-        for layer in self.upblocks:
-            if isinstance(layer, ResBlock):
-                h = torch.cat([h, hs.pop()], dim=1)
-            h = layer(h, temb, cemb)
-        h = self.tail(h)
-
-        assert len(hs) == 0
-        return h
-
-def UNet_example():
-    batch_size = 8
-    model = UNet(
-        T=1000, num_labels=10, ch=128, ch_mult=[1, 2, 2, 2],
-        num_res_blocks=2, dropout=0.1)
-    x = torch.randn(batch_size, 3, 32, 32)
-    t = torch.randint(1000, size=[batch_size])
-    labels = torch.randint(10, size=[batch_size])
-    # resB = ResBlock(128, 256, 64, 0.1)
-    # x = torch.randn(batch_size, 128, 32, 32)
-    # t = torch.randn(batch_size, 64)
-    # labels = torch.randn(batch_size, 64)
-    # y = resB(x, t, labels)
-    y = model(x, t, labels)
-    print(y.shape)
-
-
-
-
-if __name__ == '__main__':
+def TEmbeding_block():
     # 测试参数
     T = 1000  # 时间步总数
     d_model = 128  # 嵌入维度
@@ -280,3 +280,17 @@ if __name__ == '__main__':
     # 验证梯度计算
     output.sum().backward()
     print("\n梯度计算成功完成!")
+
+def attan_block():
+
+    # 创建模拟输入 (2个样本, 64通道, 32x32特征图)
+    x = torch.randn(2, 64, 32, 32)  # shape: [B, C, H, W]
+    attn_block = AttnBlock(in_ch=64)
+    output = attn_block(x)
+
+    print("Input shape:", x.shape)  # torch.Size([2, 64, 32, 32])
+    print("Output shape:", output.shape)  # torch.Size([2, 64, 32, 32])
+
+
+if __name__ == '__main__':
+    attan_block()

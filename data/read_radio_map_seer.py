@@ -48,16 +48,15 @@ if __name__ == '__main__':
     # 注意：这里直接加到原始image_gain[0]上，会修改原始数据
     # 如需保留原始数据，应先复制: modified_gain = image_gain[0].copy()
     image_gain[0][mask] += image_gain[0][mask]  # 翻倍增强
-
     # 显示结果
     plt.figure(figsize=(15, 10))
 
     plt.subplot(231)
-    plt.imshow(image_gain[0])
+    plt.imshow(image_gain[0], cmap='jet')
     plt.title('Modified Gain[0]')
 
     plt.subplot(232)
-    plt.imshow(image_sample[0])
+    plt.imshow(image_sample[0], cmap='jet')
     plt.title('Sample[0]')
 
     plt.subplot(233)
@@ -73,7 +72,7 @@ if __name__ == '__main__':
     plt.title('Build_ant[2] (Mask Source)')
 
     plt.subplot(236)
-    plt.imshow(mask, cmap='gray')  # 显示掩码区域
+    plt.imshow(mask)  # 显示掩码区域
     plt.title('Mask Region')
 
     plt.tight_layout()
