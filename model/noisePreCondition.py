@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as F
-
+from model.conv2D_block import *
 
 # def drop_connect(x, drop_ratio):
 #     keep_ratio = 1.0 - drop_ratio
@@ -21,7 +21,8 @@ class Swish(nn.Module):
 # 这个暂时不动
 class TimeEmbedding(nn.Module):
     # d_model 是频率嵌入维度
-    def __init__(self, T, d_model, dim):
+    def __init__(self, T, d_model, img_H, img_W):
+        self.img_H, self.img_W = img_H, img_W
         assert d_model % 2 == 0
         super().__init__()
         # 将math.log(10000)分成 d_model/2 份
@@ -41,22 +42,71 @@ class TimeEmbedding(nn.Module):
         self.timembedding = nn.Sequential(
             # 时间编码过程  并且 freeze=False 是可以梯度下降的 为 nn.Embedding.from_pretrained
             nn.Embedding.from_pretrained(emb, freeze=False),
-            nn.Linear(d_model, dim),
+            nn.Linear(d_model, self.img_H),
             Swish(),
-            nn.Linear(dim, dim),
+            nn.Linear(self.img_H, self.img_H*self.img_W),
         )
 
     def forward(self, t):
-        emb = self.timembedding(t)
+        emb = self.timembedding(t).reshape(-1,1, self.img_H, self.img_W)
+
         return emb
+
+def TEmbeding_block():
+    # 测试参数
+    T = 1000  # 时间步总数
+    d_model = 128  # 嵌入维度
+    img_H,img_W = 256,256  # 输出维度
+    batch_size = 8  # 批大小
+    # 创建测试实例
+    time_embedding = TimeEmbedding(T, d_model, img_H, img_W)
+    # 生成随机时间步 (范围在 0 到 T-1 之间)
+    t = torch.randint(0, T, (batch_size,))
+    # 前向传播
+    output = time_embedding(t)
+    # 打印结果
+    print("输入时间步形状:", t.shape)
+    print("输出嵌入形状:", output.shape)
+    print("\n前几个时间步的输出示例:")
+    # print(output[:3])  # 打印前3个样本的输出
+
+    # 验证梯度计算
+    output.sum().backward()
+    print("\n梯度计算成功完成!")
 
 
 # 这个条件网络可以进行更改
 class ConditionalEmbedding(nn.Module):
     # d_model 则是嵌入向量的维度
-    def __init__(self, num_labels, d_model, dim):
-        assert d_model % 2 == 0
+    def __init__(self, input_shape, output_shape,channel_base,channel_list):
         super().__init__()
+        input_channel , input_H , input_W = input_shape
+        output_channel , output_H , output_W = output_shape
+
+        # 前向网络先简单拼凑
+        # 两种思路 一种是 简单 3X3进行通道扩充等下采样后进行通道扩充
+        # 两种思路 另一种是使用 分形网络进行通道扩充
+
+        self.head =  Fractal_inception2D(input_channel=input_channel, output_channel=output_channel)
+
+
+        self.downblocks = nn.ModuleList()
+        channel_record = [channel_base]  # record output channel when dowmsample for upsample
+        now_ch = channel_base
+        for i, mult in enumerate(ch_mult):
+            out_ch = ch * mult
+            for _ in range(num_res_blocks):
+                self.downblocks.append(ResBlock(in_ch=now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout))
+                now_ch = out_ch
+                chs.append(now_ch)
+            if i != len(ch_mult) - 1:
+                self.downblocks.append(DownSample(now_ch))
+                chs.append(now_ch)
+
+        self.tail = Inception_ghost2D(C_in=sub_Cout+sub_Cout, C_out=output_channel,kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+
+        self.short_path = Inception_ghost2D(C_in=input_channel, C_out=output_channel,kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+
 
         self.condEmbedding = nn.Sequential(
             # 嵌入模块即是一种 向量选择器
@@ -70,111 +120,113 @@ class ConditionalEmbedding(nn.Module):
         emb = self.condEmbedding(t)
         return emb
 
-
-
-# 下采样和上采样可以进行平替
-# 上下采样可以进行更改
-class DownSample(nn.Module):
-    def __init__(self, in_ch):
-        super().__init__()
-        self.c1 = nn.Conv2d(in_ch, in_ch, 3, stride=2, padding=1)
-        self.c2 = nn.Conv2d(in_ch, in_ch, 5, stride=2, padding=2)
-
-    def forward(self, x, temb, cemb):
-        x = self.c1(x) + self.c2(x)
-        return x
-
-
-# 上下采样可以进行更改
-class UpSample(nn.Module):
-    def __init__(self, in_ch):
-        super().__init__()
-        self.c = nn.Conv2d(in_ch, in_ch, 3, stride=1, padding=1)
-        self.t = nn.ConvTranspose2d(in_ch, in_ch, 5, 2, 2, 1)
-
-    def forward(self, x, temb, cemb):
-        _, _, H, W = x.shape
-        x = self.t(x)
-        x = self.c(x)
-        return x
-
-
-
-#注意力模块
-
-class AttnBlock(nn.Module):
-    def __init__(self, in_ch):
-        super().__init__()
-        self.group_norm = nn.GroupNorm(32, in_ch)
-        self.proj_q = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0) # 卷积
-        self.proj_k = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
-        self.proj_v = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
-        self.proj = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        h = self.group_norm(x)
-        q = self.proj_q(h)
-        k = self.proj_k(h)
-        v = self.proj_v(h)
-
-        q = q.permute(0, 2, 3, 1).view(B, H * W, C)
-        k = k.view(B, C, H * W)
-        w = torch.bmm(q, k) * (int(C) ** (-0.5))
-        assert list(w.shape) == [B, H * W, H * W]
-        w = F.softmax(w, dim=-1)
-
-        v = v.permute(0, 2, 3, 1).view(B, H * W, C)
-        h = torch.bmm(w, v)
-        assert list(h.shape) == [B, H * W, C]
-        h = h.view(B, H, W, C).permute(0, 3, 1, 2)
-        h = self.proj(h)
-
-        return x + h
-
-#残差模块
-
-class ResBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, tdim, dropout, attn=True):
-        super().__init__()
-        self.block1 = nn.Sequential(
-            nn.GroupNorm(32, in_ch),
-            Swish(),
-            nn.Conv2d(in_ch, out_ch, 3, stride=1, padding=1),
-        )
-        self.temb_proj = nn.Sequential(
-            Swish(),
-            nn.Linear(tdim, out_ch),
-        )
-        self.cond_proj = nn.Sequential(
-            Swish(),
-            nn.Linear(tdim, out_ch),
-        )
-        self.block2 = nn.Sequential(
-            nn.GroupNorm(32, out_ch),
-            Swish(),
-            nn.Dropout(dropout),
-            nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1),
-        )
-        if in_ch != out_ch:
-            self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=1, padding=0)
-        else:
-            self.shortcut = nn.Identity()
-        if attn:
-            self.attn = AttnBlock(out_ch)
-        else:
-            self.attn = nn.Identity()
-
-
-    def forward(self, x, temb, labels):
-        h = self.block1(x)
-        h += self.temb_proj(temb)[:, :, None, None]
-        h += self.cond_proj(labels)[:, :, None, None]
-        h = self.block2(h)
-
-        h = h + self.shortcut(x)
-        h = self.attn(h)
-        return h
+#
+#
+#
+#
+# # 下采样和上采样可以进行平替
+# # 上下采样可以进行更改
+# class DownSample(nn.Module):
+#     def __init__(self, in_ch):
+#         super().__init__()
+#         self.c1 = nn.Conv2d(in_ch, in_ch, 3, stride=2, padding=1)
+#         self.c2 = nn.Conv2d(in_ch, in_ch, 5, stride=2, padding=2)
+#
+#     def forward(self, x, temb, cemb):
+#         x = self.c1(x) + self.c2(x)
+#         return x
+#
+#
+# # 上下采样可以进行更改
+# class UpSample(nn.Module):
+#     def __init__(self, in_ch):
+#         super().__init__()
+#         self.c = nn.Conv2d(in_ch, in_ch, 3, stride=1, padding=1)
+#         self.t = nn.ConvTranspose2d(in_ch, in_ch, 5, 2, 2, 1)
+#
+#     def forward(self, x, temb, cemb):
+#         _, _, H, W = x.shape
+#         x = self.t(x)
+#         x = self.c(x)
+#         return x
+#
+#
+#
+# #注意力模块
+#
+# class AttnBlock(nn.Module):
+#     def __init__(self, in_ch):
+#         super().__init__()
+#         self.group_norm = nn.GroupNorm(32, in_ch)
+#         self.proj_q = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0) # 卷积
+#         self.proj_k = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+#         self.proj_v = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+#         self.proj = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+#
+#     def forward(self, x):
+#         B, C, H, W = x.shape
+#         h = self.group_norm(x)
+#         q = self.proj_q(h)
+#         k = self.proj_k(h)
+#         v = self.proj_v(h)
+#
+#         q = q.permute(0, 2, 3, 1).view(B, H * W, C)
+#         k = k.view(B, C, H * W)
+#         w = torch.bmm(q, k) * (int(C) ** (-0.5))
+#         assert list(w.shape) == [B, H * W, H * W]
+#         w = F.softmax(w, dim=-1)
+#
+#         v = v.permute(0, 2, 3, 1).view(B, H * W, C)
+#         h = torch.bmm(w, v)
+#         assert list(h.shape) == [B, H * W, C]
+#         h = h.view(B, H, W, C).permute(0, 3, 1, 2)
+#         h = self.proj(h)
+#
+#         return x + h
+#
+# #残差模块
+#
+# class ResBlock(nn.Module):
+#     def __init__(self, in_ch, out_ch, tdim, dropout, attn=True):
+#         super().__init__()
+#         self.block1 = nn.Sequential(
+#             nn.GroupNorm(32, in_ch),
+#             Swish(),
+#             nn.Conv2d(in_ch, out_ch, 3, stride=1, padding=1),
+#         )
+#         self.temb_proj = nn.Sequential(
+#             Swish(),
+#             nn.Linear(tdim, out_ch),
+#         )
+#         self.cond_proj = nn.Sequential(
+#             Swish(),
+#             nn.Linear(tdim, out_ch),
+#         )
+#         self.block2 = nn.Sequential(
+#             nn.GroupNorm(32, out_ch),
+#             Swish(),
+#             nn.Dropout(dropout),
+#             nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1),
+#         )
+#         if in_ch != out_ch:
+#             self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=1, padding=0)
+#         else:
+#             self.shortcut = nn.Identity()
+#         if attn:
+#             self.attn = AttnBlock(out_ch)
+#         else:
+#             self.attn = nn.Identity()
+#
+#
+#     def forward(self, x, temb, labels):
+#         h = self.block1(x)
+#         h += self.temb_proj(temb)[:, :, None, None]
+#         h += self.cond_proj(labels)[:, :, None, None]
+#         h = self.block2(h)
+#
+#         h = h + self.shortcut(x)
+#         h = self.attn(h)
+#         return h
 #
 #
 # class UNet(nn.Module):
@@ -259,38 +311,17 @@ class ResBlock(nn.Module):
 #     y = model(x, t, labels)
 #     print(y.shape)
 
-def TEmbeding_block():
-    # 测试参数
-    T = 1000  # 时间步总数
-    d_model = 128  # 嵌入维度
-    dim = 32  # 输出维度
-    batch_size = 8  # 批大小
-    # 创建测试实例
-    time_embedding = TimeEmbedding(T, d_model, dim)
-    # 生成随机时间步 (范围在 0 到 T-1 之间)
-    t = torch.randint(0, T, (batch_size,))
-    # 前向传播
-    output = time_embedding(t)
-    # 打印结果
-    print("输入时间步形状:", t.shape)
-    print("输出嵌入形状:", output.shape)
-    print("\n前几个时间步的输出示例:")
-    print(output[:3])  # 打印前3个样本的输出
 
-    # 验证梯度计算
-    output.sum().backward()
-    print("\n梯度计算成功完成!")
-
-def attan_block():
-
-    # 创建模拟输入 (2个样本, 64通道, 32x32特征图)
-    x = torch.randn(2, 64, 32, 32)  # shape: [B, C, H, W]
-    attn_block = AttnBlock(in_ch=64)
-    output = attn_block(x)
-
-    print("Input shape:", x.shape)  # torch.Size([2, 64, 32, 32])
-    print("Output shape:", output.shape)  # torch.Size([2, 64, 32, 32])
+# def attan_block():
+#
+#     # 创建模拟输入 (2个样本, 64通道, 32x32特征图)
+#     x = torch.randn(2, 64, 32, 32)  # shape: [B, C, H, W]
+#     attn_block = AttnBlock(in_ch=64)
+#     output = attn_block(x)
+#
+#     print("Input shape:", x.shape)  # torch.Size([2, 64, 32, 32])
+#     print("Output shape:", output.shape)  # torch.Size([2, 64, 32, 32])
 
 
 if __name__ == '__main__':
-    attan_block()
+    TEmbeding_block()

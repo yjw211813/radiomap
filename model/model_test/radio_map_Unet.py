@@ -201,7 +201,7 @@ def BTM_Net_test():
 
 def UNet_test():
     num_batch = 16
-    img_C, img_H, img_W, feature_num = 2, 480, 480,4
+    img_C, img_H, img_W, feature_num = 3, 256, 256,4
     input_img = torch.rand(num_batch, img_C, img_H, img_W)
     original_feature = torch.randn(num_batch, 1, 1, feature_num)
 

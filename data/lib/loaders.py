@@ -23,7 +23,7 @@ class RadioUNet_c(Dataset):
     """RadioMapSeer Loader for accurate buildings and no measurements (RadioUNet_c)"""
     def __init__(self,maps_inds=np.zeros(1), phase="train",
                  ind1=0,ind2=0, 
-                 dir_dataset="./dataset/RadioMapSeer/",
+                 dir_dataset="/home/data/path_loss_data/RadioSeer/RadioMapSeer/",
                  numTx=80,                  
                  thresh=0.2,
                  simulation="DPM",
@@ -210,7 +210,7 @@ class RadioUNet_c_sprseIRT4(Dataset):
     """RadioMapSeer Loader for accurate buildings and no measurements (RadioUNet_c)"""
     def __init__(self,maps_inds=np.zeros(1), phase="train",
                  ind1=0,ind2=0, 
-                 dir_dataset="./dataset/RadioMapSeer/",
+                 dir_dataset="/home/data/path_loss_data/RadioSeer/RadioMapSeer/",
                  numTx=2,                  
                  thresh=0.2,
                  simulation="IRT4",
@@ -404,7 +404,7 @@ class RadioUNet_s(Dataset):
     """RadioMapSeer Loader for accurate buildings and no measurements (RadioUNet_c)"""
     def __init__(self,maps_inds=np.zeros(1), phase="train",
                  ind1=0,ind2=0, 
-                 dir_dataset="RadioMapSeer/",
+                 dir_dataset="/home/data/path_loss_data/RadioSeer/RadioMapSeer/",
                  numTx=80,                  
                  thresh=0.2,
                  simulation="DPM",
@@ -613,7 +613,7 @@ class RadioUNet_s_sprseIRT4(Dataset):
     """RadioMapSeer Loader for accurate buildings and no measurements (RadioUNet_c)"""
     def __init__(self,maps_inds=np.zeros(1), phase="train",
                  ind1=0,ind2=0, 
-                 dir_dataset="RadioMapSeer/",
+                 dir_dataset="/home/data/path_loss_data/RadioSeer/RadioMapSeer/",
                  numTx=2,                  
                  thresh=0.2,
                  simulation="IRT4",

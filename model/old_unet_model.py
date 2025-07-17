@@ -10,73 +10,8 @@ from torch.utils.data import Dataset, DataLoader
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
 from model.conv2D_block import *
-from environment_code.generate_radio_map_data import source_feature,data_structure
-from environment_code.tif_convert_height import map_info
 
 
-#### 或者采用元素重排上采样
-
-class map_meas_UNet(nn.Module):
-    def __init__(self):
-        super(map_meas_UNet, self).__init__()
-        C_out1 = 16
-        C_out2 = 32
-        C_out3 = 64
-        C_out4 = 128
-        C_out5 = 256
-        self.downconv1 =  Inception_ghost2D(C_in=2, C_out=C_out1, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-        self.down1 = Conv_DownSampling2D(C_out1)   #  下采样 (100,C_out1,240,240) 通道不变下采样
-        self.downconv2 =   Inception_ghost2D(C_in=C_out1, C_out=C_out2, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-        self.down2 = Conv_DownSampling2D(C_out2)   #  下采样 (100,C_out2,120,120)
-        self.downconv3 =    Inception_ghost2D(C_in=C_out2, C_out=C_out3, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-        self.down3 = Conv_DownSampling2D(C_out3)  #  下采样 (100,C_out3,60,60)
-        self.downconv4 =   Inception_ghost2D(C_in=C_out3, C_out=C_out4, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-        self.down4 = Conv_DownSampling2D(C_out4)  #  下采样 (100,C_out4,30,30)
-        self.downconv5 =   Fractal_inception2D(input_channel=C_out4, output_channel=C_out5)
-        self.down5 = Conv_DownSampling2D(C_out5)  #  下采样 (100,C_out5,15,15)
-
-        self.conv_center =   Fractal_inception2D(input_channel=C_out5, output_channel=C_out5)
-
-        self.upsam5 = bilin_conv_UpSam(C_out5) #  下采样 (100,C_out4,30,30)
-        self.upconv5 = Fractal_inception2D(input_channel=C_out4+C_out4, output_channel=C_out4)
-        self.upsam4 = bilin_conv_UpSam(C_out4)#  下采样 (100,C_out3,60,60)
-        self.upconv4 = Inception_ghost2D(C_in=C_out3+C_out3, C_out=C_out3, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-        self.upsam3 = bilin_conv_UpSam(C_out3)#  下采样 (100,C_out2,120,120)
-        self.upconv3 = Inception_ghost2D(C_in=C_out2+C_out2, C_out=C_out2, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-        self.upsam2 = bilin_conv_UpSam(C_out2)#  下采样 (100,C_out1,240,240)
-        self.upconv2 = Inception_ghost2D(C_in=C_out1+C_out1, C_out=C_out1, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-        self.upsam1 = bilin_conv_UpSam(C_out1)  # 下采样 (100,C_out1/2,480,480)
-        self.pred = torch.nn.Conv2d(int(C_out1/2), 1, 3, 1, 1)
-
-    def forward(self, input):
-        # 下采样路径
-        down1_out = self.down1(self.downconv1(input))
-        down2_out = self.down2(self.downconv2(down1_out))
-        down3_out = self.down3(self.downconv3(down2_out))
-        down4_out = self.down4(self.downconv4(down3_out))
-        center_out = self.conv_center(self.down5(self.downconv5(down4_out)))
-        # 上采样路径
-        up5_out = self.upsam5(center_out)
-        up5_out = self.upconv5(torch.cat([up5_out, down4_out], dim=1))  # 拼接
-        up4_out = self.upsam4(up5_out)
-        up4_out = self.upconv4(torch.cat([up4_out, down3_out], dim=1))  # 拼接
-        up3_out = self.upsam3(up4_out)
-        up3_out = self.upconv3(torch.cat([up3_out, down2_out], dim=1))  # 拼接
-        up2_out = self.upsam2(up3_out)
-        up2_out = self.upconv2(torch.cat([up2_out, down1_out], dim=1))  # 拼接
-        out =  self.pred(self.upsam1(up2_out))
-        return out
-
-def map_meas_UNet_test():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = map_meas_UNet().to(device)
-
-    # 创建一个输入张量 (2, 2, 480, 480)
-    input_tensor = torch.randn(8, 2, 480, 480).to(device)
-    # 通过模型进行前向传播
-    output = model(input_tensor)
-
-    print(f"Output shape: {output.shape}")
 
 
 class BTM_Net_v2(nn.Module):
@@ -216,4 +151,3 @@ if __name__ == '__main__':
 
     # map_meas_UNet_test()
     map_meas_pos_UNet_test()
-    # BTM_Net_v2_test()

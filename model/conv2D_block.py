@@ -259,6 +259,88 @@ def incetion_block_test():
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output_tensor.shape}")
 
+class Res_Inception_ghost2D(nn.Module):
+    def __init__(self, C_in, C_out,kernel_sizes,dilated_num,drop_out=0.05):
+        super(Res_Inception_ghost2D, self).__init__()
+
+        if C_out % 4 != 0:
+            raise ValueError(f"C_out ({C_out}) must be divisible by 4.")
+        sub_Cout = int(C_out / 4)
+        kernel_size = kernel_sizes[0]
+        if kernel_size == 1:
+            dilated_kernel_size = (kernel_size - 1) * dilated_num + 1
+            padding_width = (dilated_kernel_size - 1) // 2
+            self.branch1 = nn.Sequential(
+                nn.GroupNorm(C_in//4, C_in),
+                nn.Conv2d(C_in, sub_Cout, kernel_size=kernel_size,
+                          stride=(1, 1),
+                          dilation=dilated_num,
+                          padding=padding_width),
+                # nn.BatchNorm2d(sub_Cout),
+                nn.Dropout(drop_out),
+                nn.LeakyReLU()
+            )
+        else:
+            self.branch1 = nn.Sequential(
+                nn.GroupNorm(C_in // 4, C_in),
+                GhostModule2D(inp=C_in, oup=sub_Cout, depth_wise_size=kernel_size, dilated_num=dilated_num),
+                # nn.BatchNorm2d(sub_Cout),
+                nn.Dropout(drop_out),
+                nn.LeakyReLU()
+            )
+        kernel_size = kernel_sizes[1]
+        self.branch2 = nn.Sequential(
+            nn.GroupNorm(C_in // 4, C_in),
+            GhostModule2D(inp=C_in, oup=sub_Cout, depth_wise_size=kernel_size, dilated_num=dilated_num),
+            # nn.BatchNorm2d(sub_Cout),
+            nn.Dropout(drop_out),
+            nn.LeakyReLU()
+        )
+        kernel_size = kernel_sizes[2]
+        self.branch3 = nn.Sequential(
+            nn.GroupNorm(C_in // 4, C_in),
+            GhostModule2D(inp=C_in, oup=sub_Cout, depth_wise_size=kernel_size, dilated_num=dilated_num),
+            # nn.BatchNorm2d(sub_Cout),
+            nn.Dropout(drop_out),
+            nn.LeakyReLU()
+        )
+        kernel_size = kernel_sizes[3]
+        self.branch4 = nn.Sequential(
+            nn.GroupNorm(C_in // 4, C_in),
+            GhostModule2D(inp=C_in, oup=sub_Cout, depth_wise_size=kernel_size, dilated_num=dilated_num),
+            # nn.BatchNorm2d(sub_Cout),
+            nn.Dropout(drop_out),
+            nn.LeakyReLU()
+        )
+
+        self.short_path = nn.Sequential(
+                nn.GroupNorm(C_in // 4, C_in),
+                nn.Conv2d(C_in, C_out, kernel_size=1,
+                          stride=(1, 1),
+                          dilation=dilated_num,
+                          padding=0),
+                # nn.BatchNorm2d(C_out),
+                nn.LeakyReLU())
+
+    def forward(self, x):
+        short_output = self.short_path(x)
+        branch1 = self.branch1(x)
+        branch2 = self.branch2(x)
+        branch3 = self.branch3(x)
+        branch4 = self.branch4(x)
+        # 拼接所有分支的输出
+        outputs = [branch1, branch2, branch3, branch4]
+        return torch.cat(outputs, 1) + short_output  # 在通道维度上拼接
+
+def res_incetion_ghost_test():
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    input_tensor = torch.randn(2, 4, 128, 128).to(device)
+    Res_inception_module = Res_Inception_ghost2D(C_in=4, C_out=4, kernel_sizes=[1, 3, 5, 7], dilated_num=1).to(device)
+    output_tensor = Res_inception_module(input_tensor)
+    print(f"Input shape: {input_tensor.shape}")
+    print(f"Output shape: {output_tensor.shape}")
+
+
 class Inception_ghost2D(nn.Module):
     def __init__(self, C_in, C_out,kernel_sizes,dilated_num,drop_out=0.05):
         super(Inception_ghost2D, self).__init__()
@@ -454,6 +536,67 @@ def Fractal_incep_test():
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output_tensor.shape}")
 
+class Res_Fractal_inception2D(nn.Module):
+    def __init__(self,input_channel,output_channel):
+        super(Res_Fractal_inception2D, self).__init__()
+        if output_channel % 4 != 0:
+            raise ValueError(f"C_out ({output_channel}) must be divisible by 4.")
+
+        sub_Cout = int(output_channel / 4)
+
+        self.conv0001 = Res_Inception_ghost2D(C_in=input_channel, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0002 = Res_Inception_ghost2D(C_in=sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0010 = Res_Inception_ghost2D(C_in=input_channel, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0100 = Res_Inception_ghost2D(C_in=input_channel, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv1000 = Res_Inception_ghost2D(C_in=input_channel, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+
+        self.conv0003 = Res_Inception_ghost2D(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0004 = Res_Inception_ghost2D(C_in=sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0020 = Res_Inception_ghost2D(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+
+        self.conv0005 = Res_Inception_ghost2D(C_in=sub_Cout*3, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0006 = Res_Inception_ghost2D(C_in=sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0030 = Res_Inception_ghost2D(C_in=sub_Cout*3, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0007 = Res_Inception_ghost2D(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0008 = Res_Inception_ghost2D(C_in=sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0040 = Res_Inception_ghost2D(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0200 = Res_Inception_ghost2D(C_in=sub_Cout*3, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+
+    def forward(self, x):
+        ######################
+        right1out = self.conv0002(self.conv0001(x))
+        right2out = self.conv0010(x)
+        rightout1 = torch.cat([right2out,right1out], 1)  # 在通道维度上拼接
+        ######################
+        right3out = self.conv0004(self.conv0003(rightout1))
+        right4out = self.conv0020(rightout1)
+        mid_out1   = self.conv0100(x)
+        rightout2 = torch.cat([mid_out1,right4out, right3out], 1)  # 在通道维度上拼接
+        #########################
+        right5out = self.conv0006(self.conv0005(rightout2))
+        right6out = self.conv0030(rightout2)
+        rightout3 = torch.cat([right6out, right5out], 1)  # 在通道维度上拼接
+        ######################
+        right7out = self.conv0008(self.conv0007(rightout3))
+        right8out = self.conv0040(rightout3)
+        mid_out2   = self.conv0200(rightout2)
+        left_out = self.conv1000(x)
+        result = torch.cat([left_out,mid_out2,right8out, right7out], 1)  # 在通道维度上拼接
+
+        return result
+
+def Res_Fractal_incep_test():
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    input_tensor = torch.randn(16, 16, 128, 128).to(device)
+    # 创建 GhostModule 实例 norm  inception
+    Fractal_incep_exm = Res_Fractal_inception2D(input_channel=16, output_channel=16).to(device)
+    output_tensor = Fractal_incep_exm(input_tensor)
+    print(f"Input shape: {input_tensor.shape}")
+    print(f"Output shape: {output_tensor.shape}")
+
+
+
+
 class Conv_DownSampling2D(nn.Module):
     def __init__(self, C):
         super(Conv_DownSampling2D, self).__init__()
@@ -627,7 +770,10 @@ class depth_conv_mixer2D(nn.Module):
         return x
 
 if __name__ == '__main__':
-
+    # res_incetion_ghost_test()
+    # Dila_Down_test()
+    Res_Fractal_incep_test()
+    # test_PatchEmbedding()
     # conv_test()
     # ghost_test()
     # Fractal_incep_test()
@@ -641,8 +787,8 @@ if __name__ == '__main__':
     # Dila_Down_test()
     # Avg_Down_test()
     # bilinear_UpSam_test()
-    PixelShuffle_test()
+    # PixelShuffle_test()
     # ConvTranspose_test()
-    bilin_conv_test()
+    # bilin_conv_test()
     # Nearest_Conv_test()
     # bilinear_UpSam_test()

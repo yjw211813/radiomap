@@ -16,13 +16,13 @@ os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #from lib import RadioUNet_modules3, RadioUNet_loaders2
-from lib import loaders, modules
+from data.lib.loaders import RadioUNet_c_sprseIRT4
 
 
 if __name__ == '__main__':
-    Radio_train = loaders.RadioUNet_c_sprseIRT4(phase="train")
-    Radio_val = loaders.RadioUNet_c_sprseIRT4(phase="val")
-    Radio_test = loaders.RadioUNet_c_sprseIRT4(phase="test")
+    Radio_train = RadioUNet_c_sprseIRT4(phase="train")
+    Radio_val = RadioUNet_c_sprseIRT4(phase="val")
+    Radio_test = RadioUNet_c_sprseIRT4(phase="test")
 
     image_datasets = {
         'train': Radio_train, 'val': Radio_val
