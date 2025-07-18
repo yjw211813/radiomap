@@ -39,8 +39,6 @@ if __name__ == '__main__':
     image_build_ant, image_gain,image_sample = Radio_train[i]
     image_sample = image_sample * image_gain
 
-
-
     # 创建掩码：标记image_build_ant[2]中非零像素的位置
     mask = image_build_ant[2] != 0
 

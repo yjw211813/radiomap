@@ -126,6 +126,13 @@ class BTM_ghost_UNet(nn.Module):
 
         return out
 
+    def load_weights(self, checkpoint_path):
+        """加载预训练权重"""
+        self.load_state_dict(torch.load(checkpoint_path, weights_only=True))
+        print(f"Loaded weights from {checkpoint_path}")
+
+
+
 def BTM_ghost_UNet_test():
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     print(device)

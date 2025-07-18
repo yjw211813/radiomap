@@ -91,3 +91,9 @@ docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/dataset:/ho
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/liaozhengyan/dataset:/home/data -v ~/liaozhengyan/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
 ls -ld ~/liaozhengyan
 sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
+
+
+
+
+
+
