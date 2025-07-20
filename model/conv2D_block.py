@@ -770,9 +770,10 @@ class depth_conv_mixer2D(nn.Module):
         return x
 
 if __name__ == '__main__':
+    ConvTranspose_test()
     # res_incetion_ghost_test()
     # Dila_Down_test()
-    Res_Fractal_incep_test()
+    # Res_Fractal_incep_test()
     # test_PatchEmbedding()
     # conv_test()
     # ghost_test()
