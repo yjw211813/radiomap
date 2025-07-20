@@ -114,6 +114,10 @@ sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
 py2001进行计算
 信号 传播 信噪比计算 
 
+v1 [1,3,5,7] 卷积核
+v2 [3,5,7,9] 增大感受野 现在最优
+v3 [3,5,7,9] 空洞卷积加 残差模块
+v4 [3,5,7,9] 增大感受野 + 残差模块
 
 
 
