@@ -1,4 +1,4 @@
-from model.UNet_model import BTM_ghost_UNet_v1
+from model.UNet_model import BTM_ghost_UNet_v4
 # from model.metric_fun import NMSE
 import torch.nn as nn
 from torchmetrics.functional import structural_similarity_index_measure as ssim
@@ -22,9 +22,9 @@ BTM_ghost_UNet_output_shape = [1, 256, 256]
 C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-log_dir = r'../runs/model_log/BTM_ghost_net_v1'
-model_save_dir = "../runs/model_pth/BTM_ghost_net_v1/"
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+log_dir = r'../runs/model_log/BTM_ghost_net_v4'
+model_save_dir = "../runs/model_pth/BTM_ghost_net_v4/"
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 class NMSE(nn.Module):
     def __init__(self):
@@ -145,19 +145,13 @@ if __name__ == '__main__':
         'val': DataLoader(Radio_val, batch_size=test_batch_size, shuffle=True, num_workers=4)
     }
     # 设置设备为GPU
-    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
-    net = BTM_ghost_UNet_v1(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
-    net.load_weights(os.path.join(model_save_dir, f"checkpoint_epoch_160.pth"))
+
+    net = BTM_ghost_UNet_v4(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
+    # net.load_weights(os.path.join(model_save_dir, f"checkpoint_epoch_70.pth"))
     train_loader = dataloaders['train']
     val_loader = dataloaders['val']
 
     # 开始训练
     train(net, train_loader, val_loader, num_epochs=2000, device=device, save_interval=5)
 
-
-  # import psutil
-    # process = psutil.Process()
-    # #设置CPU限制
-    # process.nice(psutil.IDLE_PRIORITY_CLASS)
-    # torch.set_num_threads(1)

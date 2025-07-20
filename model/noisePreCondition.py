@@ -75,82 +75,72 @@ def TEmbeding_block():
     print("\n梯度计算成功完成!")
 
 
-# 这个条件网络可以进行更改
+
+# 这个条件网络可以进行更改 将这个网络和UNet中的attn作类比网络
 class ConditionalEmbedding(nn.Module):
     # d_model 则是嵌入向量的维度
-    def __init__(self, input_shape, output_shape,channel_base,channel_list):
-        super().__init__()
-        input_channel , input_H , input_W = input_shape
-        output_channel , output_H , output_W = output_shape
+    def __init__(self,input_shape, output_shape,C_list):
+        super(ConditionalEmbedding, self).__init__()
+        self.input_channel , self.input_H , self.input_W = input_shape
+        self.output_channel , self.output_H , self.output_W = output_shape
 
-        # 前向网络先简单拼凑
-        # 两种思路 一种是 简单 3X3进行通道扩充等下采样后进行通道扩充
-        # 两种思路 另一种是使用 分形网络进行通道扩充
+        C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
+        # 构建编码器
+        layers = []
+        layers.append(Res_Inception_ghost2D(C_in=self.input_channel, C_out=C_list[0], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
+        for i in range(len(C_list) - 1):
+            layers.append(Res_Inception_ghost2D(C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
+        self.encoder = nn.Sequential(*layers)
+        self.gelu = nn.GELU()
 
-        self.head =  Fractal_inception2D(input_channel=input_channel, output_channel=output_channel)
+    def forward(self, condition_map):
+
+        resized_map = F.interpolate(condition_map, size=(self.output_H, self.output_W), mode='bilinear', align_corners=True)
+        out_map = self.encoder(resized_map)
+
+        return out_map
+
+def ConditionalEmbedding_test():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    batch_size = 8
+    input_shape = [4,256,256]
+    output_shape = [64,64,64]
+    C_list = torch.tensor([64,64,64,128,128,128,128])
+    condition_map = torch.randn(batch_size, input_shape[0], input_shape[1], input_shape[2]).to(device)
+
+    net = ConditionalEmbedding(input_shape,output_shape,C_list).to(device)
+    output = net(condition_map)
+    print(f"Output shape: {output.shape}")
 
 
-        self.downblocks = nn.ModuleList()
-        channel_record = [channel_base]  # record output channel when dowmsample for upsample
-        now_ch = channel_base
-        for i, mult in enumerate(ch_mult):
-            out_ch = ch * mult
-            for _ in range(num_res_blocks):
-                self.downblocks.append(ResBlock(in_ch=now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout))
-                now_ch = out_ch
-                chs.append(now_ch)
-            if i != len(ch_mult) - 1:
-                self.downblocks.append(DownSample(now_ch))
-                chs.append(now_ch)
-
-        self.tail = Inception_ghost2D(C_in=sub_Cout+sub_Cout, C_out=output_channel,kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-
-        self.short_path = Inception_ghost2D(C_in=input_channel, C_out=output_channel,kernel_sizes=[1, 3, 5, 7], dilated_num=1)
-
-
-        self.condEmbedding = nn.Sequential(
-            # 嵌入模块即是一种 向量选择器
-            nn.Embedding(num_embeddings=num_labels + 1, embedding_dim=d_model, padding_idx=0),
-            nn.Linear(d_model, dim),
-            Swish(),
-            nn.Linear(dim, dim),
-        )
-
-    def forward(self, t):
-        emb = self.condEmbedding(t)
-        return emb
-
-#
-#
-#
 #
 # # 下采样和上采样可以进行平替
 # # 上下采样可以进行更改
-# class DownSample(nn.Module):
-#     def __init__(self, in_ch):
-#         super().__init__()
-#         self.c1 = nn.Conv2d(in_ch, in_ch, 3, stride=2, padding=1)
-#         self.c2 = nn.Conv2d(in_ch, in_ch, 5, stride=2, padding=2)
-#
-#     def forward(self, x, temb, cemb):
-#         x = self.c1(x) + self.c2(x)
-#         return x
-#
-#
-# # 上下采样可以进行更改
-# class UpSample(nn.Module):
-#     def __init__(self, in_ch):
-#         super().__init__()
-#         self.c = nn.Conv2d(in_ch, in_ch, 3, stride=1, padding=1)
-#         self.t = nn.ConvTranspose2d(in_ch, in_ch, 5, 2, 2, 1)
-#
-#     def forward(self, x, temb, cemb):
-#         _, _, H, W = x.shape
-#         x = self.t(x)
-#         x = self.c(x)
-#         return x
-#
-#
+class DownSample(nn.Module):
+    def __init__(self, in_ch):
+        super().__init__()
+        self.c1 = nn.Conv2d(in_ch, in_ch, 3, stride=2, padding=1)
+        self.c2 = nn.Conv2d(in_ch, in_ch, 5, stride=2, padding=2)
+
+    def forward(self, x, temb, cemb):
+        x = self.c1(x) + self.c2(x)
+        return x
+
+
+# 上下采样可以进行更改
+class UpSample(nn.Module):
+    def __init__(self, in_ch):
+        super().__init__()
+        self.c = nn.Conv2d(in_ch, in_ch, 3, stride=1, padding=1)
+        self.t = nn.ConvTranspose2d(in_ch, in_ch, 5, 2, 2, 1)
+
+    def forward(self, x, temb, cemb):
+        _, _, H, W = x.shape
+        x = self.t(x)
+        x = self.c(x)
+        return x
+
+
 #
 # #注意力模块
 #
@@ -324,4 +314,4 @@ class ConditionalEmbedding(nn.Module):
 
 
 if __name__ == '__main__':
-    TEmbeding_block()
+    ConditionalEmbedding_test()

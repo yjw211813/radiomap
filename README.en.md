@@ -60,11 +60,12 @@ docker run --shm-size=32g --gpus all -d --name liaozhengyan_GPU -v /home/cecr/li
 ## 三个可能的改进方向
 先对下面内容进行改进
 - 中间网络层 注意力模块的改进
-- 条件网络改进
-- 残差模块改进
-- 条件引入改进
+- 条件网络改进 
+- 残差模块改进   √
+- 条件引入改进   
 - 原始输入改进 （简单插值 单独网络生成 ）
-
+ 时间向量应该如何引入到当前的网络中呢？
+- 
 相似内积模块设计
 
 - 中间层加入边缘检测模块
@@ -100,6 +101,7 @@ sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
 
 
 4.开始写小论文的文字稿部分
+可以开始写小论文相关介绍部分和贡献部分
 4.将现有网络引入到当前的DDPM,DDIM,RFLOW中去
 5.然后引入到 EDM和DPM-solver
 
