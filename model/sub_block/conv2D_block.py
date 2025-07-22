@@ -754,9 +754,6 @@ def ConvTranspose_test():
     print("Output shape:", output.shape)
 
 
-
-
-
 class depth_conv_mixer2D(nn.Module):
     def __init__(self,input_channel,conv_mode,kernel_list,dilated_list):
         super(depth_conv_mixer2D, self).__init__()

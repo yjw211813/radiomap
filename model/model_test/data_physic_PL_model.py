@@ -9,7 +9,7 @@ from tensorboard.compat.tensorflow_stub.dtypes import float32
 from torch.utils.data import Dataset, DataLoader
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-from model.conv2D_block import *
+from model.sub_block.conv2D_block import *
 from concurrent.futures import ThreadPoolExecutor
 from environment_code.tif_convert_height import map_info
 from environment_code.generate_radio_map_data import data_structure,simu_visual

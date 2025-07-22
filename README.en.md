@@ -109,15 +109,44 @@ sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
 现有算法步骤（如算法2、3、4）的伪代码表述较繁琐，可合并重复逻辑（如列正交化与QR分解的协同过程），并补充关键步骤的物理意义说明（如谱截断为何能抑制噪声敏感性），避免纯数学推导导致的理解障碍。
 统一公式中符号大小写（如“H(X)”与“H”混用），并为图2(a)-(c)添加坐标轴单位（如“矩阵阶数”“RMSE”）；建议增加不同算法在数据集上的收敛曲线对比，直观展示QR-ILSM的迭代效率优势。
 
-
 完善特色四代码的应用逻辑
 py2001进行计算
 信号 传播 信噪比计算 
 
 v1 [1,3,5,7] 卷积核
+val avg_nmse_loss: 0.0064
+val Loss: 0.0039
+val avg_ssim_loss: 0.9237
+val avg_psnr_loss: 34.3554
+
 v2 [3,5,7,9] 增大感受野 现在最优
+val avg_nmse_loss: 0.0068
+val Loss: 0.0041
+val avg_ssim_loss: 0.9324
+val avg_psnr_loss: 34.3426
+只是精度更为稳定，最高性能提升并不是很大
+
 v3 [3,5,7,9] 空洞卷积加 残差模块
+val avg_nmse_loss: 0.0085
+val Loss: 0.0044
+val avg_ssim_loss: 0.9354
+val avg_psnr_loss: 33.1609
 v4 [3,5,7,9] 增大感受野 + 残差模块
+
+val NMSE: 0.0095
+val RMSE: 0.0231
+val SSIM: 0.9408
+val PSNR: 32.6419
+
+无人机 采购 到货
+无人机试飞做实验
+将实验步骤设计清楚
+无人机如何操作？
+特色无人机实验
+工程学术研讨会
+
+
+
 
 
 

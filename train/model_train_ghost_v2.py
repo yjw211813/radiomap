@@ -1,15 +1,13 @@
-from model.UNet_model import BTM_ghost_UNet_v2
+from model.sigle_Unet.BTM_ghost_v2 import BTM_ghost_UNet_v2
 # from model.metric_fun import NMSE
 import torch.nn as nn
 from torchmetrics.functional import structural_similarity_index_measure as ssim
 from torchmetrics.functional import peak_signal_noise_ratio as psnr
 import torch
-from torch.utils.data import Dataset, DataLoader
-import torch.nn.functional as F
+from torch.utils.data import DataLoader
 import os
-import sys
 import shutil
-import h5py
+import math
 from data.lib.loaders import RadioUNet_c_sprseIRT4
 
 import torch.optim as optim
@@ -26,59 +24,64 @@ log_dir = r'../runs/model_log/BTM_ghost_net_v2'
 model_save_dir = "../runs/model_pth/BTM_ghost_net_v2/"
 device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
-class NMSE(nn.Module):
-    def __init__(self):
-        super(NMSE, self).__init__()
-
-    def forward(self, outputs, targets):
-        mse = torch.mean((outputs - targets) ** 2)
-        return mse / torch.mean(targets ** 2)
-
-
-# my_net = topo_classify_net(emb_dim=64, shape_dict=shape_dict, class_num=100)
-
 def evaluate(model, val_loader, device, writer, epoch):
     model.eval()  # Set model to evaluation mode
-    nmse_loss = NMSE()
-    running_loss = 0.0
-    running_nmse_loss = 0.0
-    running_ssim_loss = 0.0
-    running_psnr_loss = 0.0
+    total_samples = 0
+    total_mse = 0.0
+    total_energy = 0.0  # 用于NMSE的分母计算（目标的总能量）
+    total_ssim = 0.0
+    total_psnr = 0.0
+
     with torch.no_grad():
         for inputs, targets, samples in val_loader:
             inputs = inputs.to(device)
             targets = targets.to(device)
             samples = samples.to(device)
             samples = samples * targets
-
             inputs = torch.cat((inputs, samples), 1)
 
             # Forward pass
             outputs = model(inputs)
-            # Calculate loss
-            loss = torch.nn.MSELoss()(outputs, targets)
-            running_loss += loss.item() / inputs.shape[0]
-            nmse_loss_value = nmse_loss(outputs, targets)
-            running_nmse_loss += nmse_loss_value.item()
-            # 使用 torchmetrics.functional  计算 SSIM
-            ssim_loss_value = ssim(outputs, targets)
-            running_ssim_loss += ssim_loss_value.item()
-            # 使用 torchmetrics.functional  计算 PSNR
-            psnr_loss_value = psnr(outputs, targets)
-            running_psnr_loss += psnr_loss_value.item()
 
-    running_loss = torch.tensor(running_loss, device=device)
-    avg_loss = torch.sqrt(running_loss / len(val_loader))
-    avg_nmse_loss = running_nmse_loss / len(val_loader)
-    avg_ssim_loss = running_ssim_loss / len(val_loader)
-    avg_psnr_loss = running_psnr_loss / len(val_loader)
-    print(f"val avg_nmse_loss: {avg_nmse_loss:.4f}")
-    print(f"val Loss: {avg_loss:.4f}")
-    print(f"val avg_ssim_loss: {avg_ssim_loss:.4f}")
-    print(f"val avg_psnr_loss: {avg_psnr_loss:.4f}")
+            # 获取当前batch的样本数
+            batch_size = inputs.size(0)
+            total_samples += batch_size
+
+            # 计算MSE（整个batch的平均）
+            criterion = nn.MSELoss()
+            mse_batch = criterion(outputs, targets)
+            total_mse += mse_batch.item() * batch_size  # 累加总MSE（未平均）
+
+            # 计算NMSE所需的分母（目标向量的能量）
+            energy_batch = criterion(targets, torch.zeros_like(targets))
+            total_energy += energy_batch.item() * batch_size  # 累加总能量
+
+            # 计算SSIM（整个batch的平均）
+            ssim_batch = ssim(outputs, targets)
+            total_ssim += ssim_batch.item() * batch_size
+
+            # 计算PSNR（整个batch的平均）
+            psnr_batch = psnr(outputs, targets)
+            total_psnr += psnr_batch.item() * batch_size
+
+    # 计算整个验证集的平均指标
+    avg_mse = total_mse / total_samples  # 整个验证集的平均MSE
+    avg_rmse = math.sqrt(avg_mse)  # RMSE
+    avg_nmse = total_mse / total_energy  # NMSE = 总MSE / 总能量
+    avg_ssim = total_ssim / total_samples
+    avg_psnr = total_psnr / total_samples
+
+    print(f"val NMSE: {avg_nmse:.4f}")
+    print(f"val RMSE: {avg_rmse:.4f}")
+    print(f"val SSIM: {avg_ssim:.4f}")
+    print(f"val PSNR: {avg_psnr:.4f}")
+
     # Write validation metrics to TensorBoard
-    writer.add_scalar('Loss/val', avg_loss, epoch)
-
+    writer.add_scalar('Loss/val', avg_rmse, epoch)
+    # 可选：记录其他指标
+    writer.add_scalar('NMSE/val', avg_nmse, epoch)
+    writer.add_scalar('SSIM/val', avg_ssim, epoch)
+    writer.add_scalar('PSNR/val', avg_psnr, epoch)
 
 
 def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):

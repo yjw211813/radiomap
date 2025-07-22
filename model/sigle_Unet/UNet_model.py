@@ -1,9 +1,8 @@
-import torch
 import sys
 import os
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-from model.conv2D_block import *
+from model.sub_block.conv2D_block import *
 
 class Swish(nn.Module):
     def forward(self, x):
@@ -41,6 +40,40 @@ def BTM_Net_v3_test():
     condition_map = torch.randn(batch_size, input_shape[0], input_shape[1], input_shape[2]).to(device)
 
     net = BTM_Net_v3(input_shape,output_shape,C_list).to(device)
+    output = net(condition_map)
+    print(f"Output shape: {output.shape}")
+
+class BTM_Net_v5(nn.Module):
+    def __init__(self,input_shape, output_shape,C_list):
+        super(BTM_Net_v5, self).__init__()
+        self.input_channel , self.input_H , self.input_W = input_shape
+        self.output_channel , self.output_H , self.output_W = output_shape
+        kernel_size = [3,5,7,9]
+        C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
+        # 构建编码器
+        layers = []
+        layers.append(Res_Inception_ghost2D(C_in=self.input_channel, C_out=C_list[0], kernel_sizes=kernel_size, dilated_num=1))
+        for i in range(len(C_list) - 1):
+            layers.append(Res_Inception_ghost2D(C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=kernel_size, dilated_num=1))
+        self.encoder = nn.Sequential(*layers)
+        self.gelu = nn.GELU()
+
+    def forward(self, condition_map):
+
+        resized_map = F.interpolate(condition_map, size=(self.output_H, self.output_W), mode='bilinear', align_corners=True)
+        out_map = self.encoder(resized_map)
+
+        return out_map
+
+def BTM_Net_v5_test():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    batch_size = 8
+    input_shape = [4,256,256]
+    output_shape = [64,64,64]
+    C_list = torch.tensor([64,64,64,128,128,128,128])
+    condition_map = torch.randn(batch_size, input_shape[0], input_shape[1], input_shape[2]).to(device)
+
+    net = BTM_Net_v5(input_shape,output_shape,C_list).to(device)
     output = net(condition_map)
     print(f"Output shape: {output.shape}")
 
@@ -633,7 +666,8 @@ if __name__ == '__main__':
     # BTM_ghost_conv_up_test()
     # BTM_ghost_UNet_v1_test()
     # BTM_ghost_UNet_v3_test()
-    BTM_ghost_UNet_v4_test()
+    # BTM_ghost_UNet_v4_test()
+    BTM_Net_v5_test()
     # BTM_Net_v4_test()
     # map_meas_pos_UNet_test()
     # BTM_ghost_UNet_test()

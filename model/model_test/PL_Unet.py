@@ -1,16 +1,12 @@
-import math
 from pydoc import importfile
 import sys
 import os
 import h5py
-import numpy as np
-import torch
 from torch.utils.data import Dataset, DataLoader
 
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-from model.conv2D_block import *
-from environment_code.generate_radio_map_data import source_feature,data_structure
+from model.sub_block.conv2D_block import *
 from environment_code.tif_convert_height import map_info
 
 

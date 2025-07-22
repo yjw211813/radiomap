@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-from model.conv2D_block import *
+from model.sub_block.conv2D_block import *
 
 
 
