@@ -147,7 +147,7 @@ val PSNR: 32.6419
 
 
 
-
+docker run --shm-size=16g --gpus all -d --name deep_au_test  deep_au:v1
 
 
 

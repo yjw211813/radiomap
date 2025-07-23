@@ -1,0 +1,53 @@
+from model.diffusion_model.TrainCondition import train, eval
+
+
+def main(model_config=None):
+    modelConfig = {
+        "state": "train", # or eval
+        "device": "cuda:2",
+        # 训练到70轮之后开始调用余弦学习率调度器
+        "epoch": 200,
+        "batch_size": 32,
+        "T": 500,
+
+        "UNet_input_shape":[5, 256, 256],
+        "UNet_output_shape":[1, 256, 256],
+        "C_down_list": [64, 128, 256, 512],
+        "C_list_attn": [64, 64, 128, 128, 128],
+
+        "w": 1.8,
+
+        "dropout": 0.15,
+        "lr": 1e-4,
+        "multiplier": 2.5,
+        "beta_1": 1e-4,
+        "beta_T": 0.028,
+
+        "img_H":256,
+        "img_W":256,
+
+        "grad_clip": 1.,
+
+        "log_dir":"../runs/model_log/DDPM_v1_log/",
+
+
+        "save_dir": "../runs/model_pth/DDPM_v1_pth/",
+        "training_load_weight": None,
+        "test_load_weight": "ckpt_63_.pt",
+        "sampled_dir": "../runs/diffusion_model/SampledImgs/",
+
+        "sampledNoisyImgName": "NoisyGuidenceImgs.png",
+        "sampledImgName": "SampledGuidenceImgs.png",
+        "originalImgName": "OriginalImgs.png",
+        "nrow": 8
+    }
+    if model_config is not None:
+        modelConfig = model_config
+    if modelConfig["state"] == "train":
+        train(modelConfig)
+    else:
+        eval(modelConfig)
+
+
+if __name__ == '__main__':
+    main()
