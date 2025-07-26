@@ -3,8 +3,8 @@ from model.diffusion_model.TrainCondition import train, eval
 
 def main(model_config=None):
     modelConfig = {
-        "state": "train", # or eval
-        "device": "cuda:2",
+        "state": "eval", # or eval
+        "device": "cuda:3",
         # 训练到70轮之后开始调用余弦学习率调度器
         "epoch": 1000,
         "batch_size": 32,
@@ -33,7 +33,7 @@ def main(model_config=None):
 
         "save_dir": "../runs/model_pth/DDPM_v1_pth/",
         "training_load_weight": None,
-        "test_load_weight": "ckpt_198_.pt",
+        "test_load_weight": "ckpt_998_.pt",
         "sampled_dir": "../runs/diffusion_model/SampledImgs/",
 
         "sampledNoisyImgName": "NoisyGuidenceImgs.png",

@@ -12,7 +12,7 @@ from torchvision.utils import save_image
 
 from model.diffusion_model.diffusionCondition import GaussianDiffusionSampler, GaussianDiffusionTrainer
 from model.diffusion_model.noisePreCondition import noise_UNet
-from model.diffusion_model.Scheduler import GradualWarmupScheduler
+from Scheduler import GradualWarmupScheduler
 from data.lib.loaders import RadioUNet_c_sprseIRT4
 from torch.utils.tensorboard import SummaryWriter
 
@@ -68,9 +68,9 @@ def train(modelConfig: Dict):
                 b = condition_info.shape[0]
                 # train
                 condition_info = condition_info.to(device)
-                x_0 = targets.to(device)
+
                 samples = samples.to(device)
-                samples = samples * x_0
+                samples = samples * targets
                 condition_info = torch.cat((condition_info, samples), 1)
                 x_0 = targets.to(device)
 
@@ -110,10 +110,9 @@ def eval(modelConfig: Dict):
         b = condition_info.shape[0]
         condition_info = condition_info.to(device)
         samples = samples.to(device)
-        x_0 = targets.to(device)
-        samples = samples * x_0
+        samples = samples * targets
         condition_info = torch.cat((condition_info, samples), 1)
-
+        x_0 = targets.to(device)
 
         net_model = noise_UNet(T=modelConfig["T"],
                                input_shape=modelConfig["UNet_input_shape"],
@@ -139,7 +138,7 @@ def eval(modelConfig: Dict):
         save_image(saveNoisy, os.path.join(modelConfig["sampled_dir"],  modelConfig["sampledNoisyImgName"]), nrow=modelConfig["nrow"])
 
         sampledImgs = sampler(noisyImage, condition_info)
-        # sampledImgs = sampledImgs * 0.5 + 0.5  # [0 ~ 1]
+        sampledImgs = sampledImgs * 0.5 + 0.5  # [0 ~ 1]
         print(sampledImgs)
         save_image(sampledImgs, os.path.join(modelConfig["sampled_dir"],  modelConfig["sampledImgName"]), nrow=modelConfig["nrow"])
         save_image(x_0, os.path.join(modelConfig["sampled_dir"],  modelConfig["originalImgName"]), nrow=modelConfig["nrow"])

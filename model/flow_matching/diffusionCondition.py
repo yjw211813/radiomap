@@ -98,20 +98,6 @@ class GaussianDiffusionSampler(nn.Module):
         assert x_t.shape == eps.shape
         return extract(self.coeff1, t, x_t.shape) * x_t - extract(self.coeff2, t, x_t.shape) * eps
 
-    def batch_minmax_normalize(self,x):
-        """输入形状: (B, C, H, W)"""
-        # 计算每张图片的最小值和最大值（保持维度以便广播）
-        min_vals = x.view(x.size(0), -1).min(dim=1)[0]  # shape: (B,)
-        max_vals = x.view(x.size(0), -1).max(dim=1)[0]  # shape: (B,)
-
-        # 扩展维度以便广播 [B,] -> [B,1,1,1]
-        min_vals = min_vals[:, None, None, None]
-        max_vals = max_vals[:, None, None, None]
-
-        # 归一化到 [0, 1]
-        normalized = (x - min_vals) / (max_vals - min_vals + 1e-10)  # 避免除零
-        return normalized
-
     def p_mean_variance(self, x_t, t, condition_info):
         # below: only log_variance is used in the KL computations
         var = torch.cat([self.posterior_var[1:2], self.betas[1:]])
@@ -138,7 +124,7 @@ class GaussianDiffusionSampler(nn.Module):
             x_t = mean + torch.sqrt(var) * noise
             assert torch.isnan(x_t).int().sum() == 0, "nan in tensor."
         x_0 = x_t
-        return self.batch_minmax_normalize(x_0)
+        return torch.clip(x_0, -1, 1)
 
 def GaussianDiffusionSamplerTest():
     device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
