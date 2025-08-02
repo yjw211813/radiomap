@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+from torchmetrics.functional import structural_similarity_index_measure as ssim
 class NMSE(nn.Module):
     def __init__(self, eps=1e-9):
         """
@@ -47,8 +47,72 @@ def NMSE_test():
     loss.backward()
     print("Gradients calculated successfully")
 
+class SSIMLoss(nn.Module):
+    """
+    基于 torchmetrics 的 SSIM 损失函数
 
-class SSIM(nn.Module):
+    特性：
+    1. 可配置数据范围(data_range)
+    2. 支持动态调整高斯核参数
+    3. 自动处理输入范围
+    4. 可选的稳定性保护
+    """
+
+    def __init__(self, data_range=1.0, kernel_size=11, sigma=1.5, reduction='elementwise_mean', stability=1e-8):
+        super().__init__()
+        self.data_range = data_range
+        self.kernel_size = kernel_size
+        self.sigma = sigma
+        self.reduction = reduction
+        self.stability = stability
+
+    def forward(self, preds, target):
+        """
+        参数:
+        preds: 模型输出 [B, C, H, W]
+        target: 目标图像 [B, C, H, W]
+
+        返回:
+        loss: SSIM损失值 (1 - SSIM)
+        """
+        # 确保输入在合理范围内
+        preds = torch.clamp(preds, 0, self.data_range)
+        target = torch.clamp(target, 0, self.data_range)
+
+        # 使用函数式接口计算SSIM (返回形状 [B])
+        ssim_val = ssim(
+            preds=preds,
+            target=target,
+            data_range=self.data_range,
+            kernel_size=self.kernel_size,
+            sigma=self.sigma,
+            reduction='elementwise_mean'  # 确保返回每个样本的SSIM值
+        )
+        # 转换为损失值 (1 - SSIM)
+        loss = 1 - ssim_val  # 形状 [B]
+
+        # 添加稳定性项防止梯度问题
+        return loss + self.stability
+
+
+def SSIMLoss_test():
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    # 创建损失函数对象
+    ssim_loss = SSIMLoss(data_range=1.0).to(device)
+
+    # 模拟数据
+    outputs = torch.rand(8, 1, 256, 256, requires_grad=True).to(device) # 需要梯度
+    targets = torch.rand(8, 1, 256, 256).to(device)
+
+    # 计算损失
+    loss = ssim_loss(outputs, targets)
+    print(f"SSIM Loss: {loss.item():.6f}")
+
+    # 反向传播测试
+    loss.backward()
+    print("Gradients calculated successfully")
+
+class my_SSIM(nn.Module):
     def __init__(self, L=1.0, k1=0.01, k2=0.03):
         """
         SSIM（结构相似性指数）损失函数
@@ -57,7 +121,7 @@ class SSIM(nn.Module):
             L: 像素值的动态范围（对于[0,1]范围的图像，L=1；对于[0,255]范围的图像，L=255）
             k1, k2: SSIM计算中的常数，通常设为0.01和0.03
         """
-        super(SSIM, self).__init__()
+        super(my_SSIM, self).__init__()
         self.L = L
         self.k1 = k1
         self.k2 = k2
@@ -108,16 +172,17 @@ class SSIM(nn.Module):
         # 对通道和batch取平均
         ssim_val = torch.mean(ssim_per_channel)
 
-        # 返回SSIM损失 (1 - SSIM)，因为SSIM越大表示越相似
-        return 1 - ssim_val
+        # 返回SSIM损失
+        return ssim_val
 
-def SSIM_test():
+def my_SSIM_test():
     # 创建损失函数对象
-    ssim_loss = SSIM(L=1.0)  # 假设图像在[0,1]范围内
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    ssim_loss = my_SSIM(L=1.0).to(device)  # 假设图像在[0,1]范围内
 
     # 模拟数据
-    outputs = torch.rand(8, 1, 256, 256, requires_grad=True)  # 需要梯度
-    targets = torch.rand(8, 1, 256, 256)
+    outputs = torch.rand(8, 1, 256, 256, requires_grad=True).to(device)  # 需要梯度
+    targets = torch.rand(8, 1, 256, 256).to(device)
 
     # 计算损失
     loss = ssim_loss(outputs, targets)
@@ -188,5 +253,6 @@ def PSNR_test():
 # 使用示例
 if __name__ == "__main__":
     # NMSE_test()
-    SSIM_test()
-
+    # SSIM_test()
+    SSIMLoss_test()
+#

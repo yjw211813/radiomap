@@ -89,7 +89,7 @@ pip install h5py-3.14.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.w
 docker run --shm-size=8g -d --name liaozhengyan_GPU -p 32956:22 liaozhengyan_gpu:latest
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/data:/home/data -v ~/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/dataset:/home/data -v ~/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
-docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/liaozhengyan/dataset:/home/data -v ~/liaozhengyan/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
+docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/liaozhengyan/dataset:/home/data -v ~/liaozhengyan/code:/home/code -p 32944:22 liaozhengyan_gpu:latestV2
 ls -ld ~/liaozhengyan
 sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
 
@@ -137,6 +137,34 @@ val NMSE: 0.0095
 val RMSE: 0.0231
 val SSIM: 0.9408
 val PSNR: 32.6419
+
+multi_scale v5 将多尺度卷积核加入到注意力核和 Unet卷积网络中没有动中间的分形卷积
+Epoch [947/2000], Train Loss: 0.0000
+val NMSE: 0.0060
+val RMSE: 0.0183
+val SSIM: 0.9158
+val PSNR: 34.6274
+
+multi_scale v6 将多尺度卷积核加入到注意力核和 Unet卷积网络 全部替换成 多尺度卷积
+Epoch [779/2000], Train Loss: 0.0000
+val NMSE: 0.0052
+val RMSE: 0.0171
+val SSIM: 0.9325
+val PSNR: 35.2647
+Epoch [959/2000], Train Loss: 0.0000
+val NMSE: 0.0050
+val RMSE: 0.0167
+val SSIM: 0.9194
+val PSNR: 35.4381
+ghost v6 在原有v1的基础上将网络加深
+Epoch [659/2000], Train Loss: 0.0000
+val NMSE: 0.0070
+val RMSE: 0.0199
+val SSIM: 0.9224
+val PSNR: 33.8325
+
+multi_scale v7 加入 SSIM loss到训练中：
+
 
 无人机 采购 到货
 无人机试飞做实验

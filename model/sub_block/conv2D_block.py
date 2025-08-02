@@ -41,7 +41,7 @@ class GhostModule2D(nn.Module):
         init_channels = math.ceil(oup / ratio)
         new_channels = init_channels * (ratio - 1)
         self.primary_conv = nn.Sequential(
-            nn.Conv2d(inp, init_channels, channel_kernel_size, stride, channel_kernel_size//2, bias=False),
+            nn.Conv2d(in_channels = inp, out_channels = init_channels, kernel_size = channel_kernel_size,stride = stride,padding = channel_kernel_size//2, bias=False),
             nn.BatchNorm2d(init_channels),
             nn.ReLU(inplace=True) if relu else nn.Sequential(),
         )
@@ -103,6 +103,7 @@ def se_test():
     se_block = SE_Block2D(inchannel=32)
     output = se_block(x)
     print(output.shape)  # 应输出 (2, 32, 128, 128)
+
 
 class Inception_group2D(nn.Module):
     def __init__(self, C_in, C_out,kernel_sizes,dilated_num,drop_out=0.05):
@@ -178,10 +179,101 @@ class Inception_group2D(nn.Module):
         # 拼接所有分支的输出
         outputs = [branch1, branch2, branch3, branch4]
         return torch.cat(outputs, 1)  # 在通道维度上拼接
-
 def incetion_group_test():
     input_tensor = torch.randn(2, 4, 128, 128)
     inception_module = Inception_group2D(C_in=4, C_out=4, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+    output_tensor = inception_module(input_tensor)
+    print(f"Input shape: {input_tensor.shape}")
+    print(f"Output shape: {output_tensor.shape}")
+
+
+class multi_scale_block2D(nn.Module):
+    def __init__(self, C_in, C_out,kernel_sizes,dilated_num,drop_out=0.05):
+        super(multi_scale_block2D, self).__init__()
+
+        kernel_size = kernel_sizes[0]
+        dilated_kernel_size = (kernel_size - 1) * dilated_num + 1
+        padding_width = (dilated_kernel_size - 1) // 2
+        # gcd_value = math.gcd(C_in, C_out)
+        self.branch1 = nn.Sequential(
+            nn.Conv2d(C_in, C_out, kernel_size= kernel_size,
+                             stride=(1, 1),
+                             dilation=dilated_num,
+                             # groups=gcd_value,
+                             padding= padding_width),
+            nn.BatchNorm2d(C_out),
+            nn.Dropout(drop_out),
+            nn.LeakyReLU()
+        )
+
+        kernel_size = kernel_sizes[1]
+        dilated_kernel_size = (kernel_size - 1) * dilated_num + 1
+        padding_width = (dilated_kernel_size - 1) // 2
+
+        self.branch2 = nn.Sequential(
+            nn.Conv2d(C_in, C_out, kernel_size=kernel_size,
+                             stride=(1, 1),
+                             dilation=dilated_num,
+                             # groups=gcd_value,
+                             padding=padding_width),
+            nn.BatchNorm2d(C_out),
+            nn.Dropout(drop_out),
+            nn.LeakyReLU()
+        )
+        kernel_size = kernel_sizes[2]
+        dilated_kernel_size = (kernel_size - 1) * dilated_num + 1
+        padding_width = (dilated_kernel_size - 1) // 2
+        self.branch3 = nn.Sequential(
+            nn.Conv2d(C_in, C_out, kernel_size= kernel_size,
+                             stride=(1, 1),
+                             dilation=dilated_num,
+                             # groups=gcd_value,
+                             padding=padding_width),
+            nn.BatchNorm2d(C_out),
+            nn.Dropout(drop_out),
+            nn.LeakyReLU()
+        )
+
+        kernel_size = kernel_sizes[3]
+        dilated_kernel_size = (kernel_size - 1) * dilated_num + 1
+        padding_width = (dilated_kernel_size - 1) // 2
+        self.branch4 = nn.Sequential(
+            nn.Conv2d(C_in, C_out, kernel_size=kernel_size,
+                             stride=(1, 1),
+                             dilation=dilated_num,
+                             # groups=gcd_value,
+                             padding= padding_width),
+            nn.BatchNorm2d(C_out),
+            nn.Dropout(drop_out),
+            nn.LeakyReLU()
+        )
+
+    def forward(self, x):
+        branch1 = self.branch1(x)
+        branch2 = self.branch2(x)
+        branch3 = self.branch3(x)
+        branch4 = self.branch4(x)
+        # 拼接所有分支的输出
+        outputs = self.channel_shuffle(branch1+branch2+branch3+branch4)
+        return outputs  # 在通道维度上拼接
+
+
+    def channel_shuffle(self, x):
+        """通道混洗操作"""
+        batch_size, num_channels, height, width = x.size()
+        # 确保通道数能被分组数整除
+        assert num_channels % 4 == 0, "通道数必须能被分组数整除"
+        channels_per_group = num_channels // 4
+        # 重塑张量以进行分组 - 使用reshape
+        x = x.reshape(batch_size, 4, channels_per_group, height, width)
+        # 转置分组和通道维度 - 不再需要contiguous()
+        x = torch.transpose(x, 1, 2)
+        # 重塑回原始尺寸 - 使用reshape
+        return x.reshape(batch_size, -1, height, width)
+
+def multi_scale_block2D_test():
+    input_tensor = torch.randn(2, 4, 128, 128)
+    inception_module = multi_scale_block2D(C_in=4, C_out=16, kernel_sizes=[3, 5, 7, 9], dilated_num=1)
     output_tensor = inception_module(input_tensor)
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output_tensor.shape}")
@@ -595,6 +687,64 @@ def Res_Fractal_incep_test():
     print(f"Output shape: {output_tensor.shape}")
 
 
+class Fractal_multi_scale2D(nn.Module):
+    def __init__(self,input_channel,output_channel):
+        super(Fractal_multi_scale2D, self).__init__()
+        if output_channel % 4 != 0:
+            raise ValueError(f"C_out ({output_channel}) must be divisible by 4.")
+
+        sub_Cout = int(output_channel / 4)
+
+        self.conv0001 = multi_scale_block2D(C_in=input_channel, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0002 = multi_scale_block2D(C_in=sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0010 = multi_scale_block2D(C_in=input_channel, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0100 = multi_scale_block2D(C_in=input_channel, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv1000 = multi_scale_block2D(C_in=input_channel, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+
+        self.conv0003 = multi_scale_block2D(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0004 = multi_scale_block2D(C_in=sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0020 = multi_scale_block2D(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+
+        self.conv0005 = multi_scale_block2D(C_in=sub_Cout*3, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0006 = multi_scale_block2D(C_in=sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0030 = multi_scale_block2D(C_in=sub_Cout*3, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0007 = multi_scale_block2D(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0008 = multi_scale_block2D(C_in=sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0040 = multi_scale_block2D(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+        self.conv0200 = multi_scale_block2D(C_in=sub_Cout*3, C_out=sub_Cout, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
+
+    def forward(self, x):
+        ######################
+        right1out = self.conv0002(self.conv0001(x))
+        right2out = self.conv0010(x)
+        rightout1 = torch.cat([right2out,right1out], 1)  # 在通道维度上拼接
+        ######################
+        right3out = self.conv0004(self.conv0003(rightout1))
+        right4out = self.conv0020(rightout1)
+        mid_out1   = self.conv0100(x)
+        rightout2 = torch.cat([mid_out1,right4out, right3out], 1)  # 在通道维度上拼接
+        #########################
+        right5out = self.conv0006(self.conv0005(rightout2))
+        right6out = self.conv0030(rightout2)
+        rightout3 = torch.cat([right6out, right5out], 1)  # 在通道维度上拼接
+        ######################
+        right7out = self.conv0008(self.conv0007(rightout3))
+        right8out = self.conv0040(rightout3)
+        mid_out2   = self.conv0200(rightout2)
+        left_out = self.conv1000(x)
+        result = torch.cat([left_out,mid_out2,right8out, right7out], 1)  # 在通道维度上拼接
+
+        return result
+
+def Fractal_multi_scale2D_test():
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    input_tensor = torch.randn(16, 16, 128, 128).to(device)
+    # 创建 GhostModule 实例 norm  inception
+    Fractal_incep_exm = Fractal_multi_scale2D(input_channel=16, output_channel=16).to(device)
+    output_tensor = Fractal_incep_exm(input_tensor)
+    print(f"Input shape: {input_tensor.shape}")
+    print(f"Output shape: {output_tensor.shape}")
+
 
 
 class Conv_DownSampling2D(nn.Module):
@@ -767,7 +917,9 @@ class depth_conv_mixer2D(nn.Module):
         return x
 
 if __name__ == '__main__':
-    ConvTranspose_test()
+    Fractal_multi_scale2D_test()
+    # multi_scale_block2D_test()
+    # ConvTranspose_test()
     # res_incetion_ghost_test()
     # Dila_Down_test()
     # Res_Fractal_incep_test()
