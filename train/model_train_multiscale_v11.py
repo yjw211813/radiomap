@@ -2,7 +2,7 @@ from model.sigle_Unet.BTM_multi_scale_v6 import BTM_multi_scale_v6
 # from model.metric_fun import NMSE
 import torch.nn as nn
 from torchmetrics.functional import structural_similarity_index_measure as ssim
-from model.sub_block.loss_cal import DynamicLoss,FourierLoss
+from model.sub_block.loss_cal import DynamicLoss,FourierLoss,MaskFourierLoss
 from torchmetrics.functional import peak_signal_noise_ratio as psnr
 import torch
 from torch.utils.data import DataLoader
@@ -22,10 +22,10 @@ BTM_ghost_UNet_output_shape = [1, 256, 256]
 C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v9_ssim'
+log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v10_ssim'
 model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v6_ssim/"
-model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"
-device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v10_ssim/"
+device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
 
 def evaluate(model, val_loader, device, writer, epoch):
     model.eval()  # Set model to evaluation mode
@@ -102,12 +102,14 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     # 初始化动态损失
-    fourier_loss = FourierLoss(
-    mse_weight=1.0,
-    fourier_amp_weight=0.3,
-    fourier_phase_weight=0.1,
-    switch_epoch=5,
-    mix_prob=0.1
+    maskFourierLoss = MaskFourierLoss(
+        mse_weight = 1.0,
+        fourier_phase_weight = 0.1,
+        low_freq_radius = 0.2,  # 低频区域半径比例
+        low_freq_amp_weight = 0.05,  # 低频区域振幅权重
+        high_freq_amp_weight = 0.35,  # 高频区域振幅权重
+        switch_epoch =5,
+        mix_prob= 0.05,
     ).to(device)
     model.to(device)
 
@@ -125,7 +127,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
             # Forward pass
             outputs = model(inputs)
             # Calculate loss
-            loss = fourier_loss(outputs, targets, epoch)
+            loss = maskFourierLoss(outputs, targets, epoch)
 
             running_loss += loss.item()/inputs.shape[0]
             # Backward pass and optimization

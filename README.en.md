@@ -179,21 +179,44 @@ multi_scale v8 降低 SSIM loss对整体loss的影响
 multi_scale v9 降低 SSIM loss对整体loss的影响 在8的基础上引入随机loss
 8的效果训练过程不太稳定
 然后
-Epoch [232/2000], Train Loss: 0.0000
-val NMSE: 0.0073
-val RMSE: 0.0202
-val SSIM: 0.8802
-val PSNR: 33.8484
-Epoch [407/2000], Train Loss: 0.0000
-val NMSE: 0.0063
-val RMSE: 0.0187
-val SSIM: 0.9213
-val PSNR: 34.4562
+
 Epoch [682/2000], Train Loss: 0.0000
 val NMSE: 0.0060
 val RMSE: 0.0183
 val SSIM: 0.9278
 val PSNR: 34.6751
+Epoch [569/2000], Train Loss: 0.0000
+val NMSE: 0.0059
+val RMSE: 0.0182
+val SSIM: 0.9279
+val PSNR: 34.7340
+
+multi_scale v10 使用对数化的 傅里叶loss来训练模型
+val NMSE: 0.0054
+val RMSE: 0.0175
+val SSIM: 0.9374
+val PSNR: 35.0713
+
+Epoch [11/2000], Train Loss: 0.0014
+val NMSE: 0.0067
+val RMSE: 0.0194
+val SSIM: 0.9464
+val PSNR: 34.0944
+
+
+multi_scale v11 增加傅里叶高频区域loss
+val NMSE: 0.0052
+val RMSE: 0.0171
+val SSIM: 0.9338
+val PSNR: 35.2107
+
+Epoch [12/2000], Train Loss: 0.0005
+val NMSE: 0.0064
+val RMSE: 0.0189
+val SSIM: 0.9507
+val PSNR: 34.3358
+
+
 
 
 无人机 采购 到货
