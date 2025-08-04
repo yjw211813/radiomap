@@ -20,8 +20,8 @@ BTM_ghost_UNet_output_shape = [1, 256, 256]
 C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-log_dir = r'../runs/model_log/BTM_ghost_net_v3'
-model_save_dir = "../runs/model_pth/BTM_ghost_net_v3/"
+log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_ghost_net_v3'
+model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_ghost_net_v3/"
 device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
 
 def evaluate(model, val_loader, device, writer, epoch):

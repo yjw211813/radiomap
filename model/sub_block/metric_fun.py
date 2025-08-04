@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torchmetrics.functional import structural_similarity_index_measure as ssim
+
 class NMSE(nn.Module):
     def __init__(self, eps=1e-9):
         """

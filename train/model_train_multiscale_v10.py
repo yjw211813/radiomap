@@ -1,7 +1,8 @@
-from model.sigle_Unet.BTM_ghost_v4 import BTM_ghost_UNet_v4
+from model.sigle_Unet.BTM_multi_scale_v6 import BTM_multi_scale_v6
 # from model.metric_fun import NMSE
 import torch.nn as nn
 from torchmetrics.functional import structural_similarity_index_measure as ssim
+from model.sub_block.loss_cal import DynamicLoss,FourierLoss
 from torchmetrics.functional import peak_signal_noise_ratio as psnr
 import torch
 from torch.utils.data import DataLoader
@@ -13,6 +14,7 @@ from data.lib.loaders import RadioUNet_c_sprseIRT4
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
+
 train_batch_size = 32  # 批次大小
 test_batch_size = 32  # 批次大小
 BTM_ghost_UNet_input_shape = [4, 256, 256]
@@ -20,9 +22,9 @@ BTM_ghost_UNet_output_shape = [1, 256, 256]
 C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_ghost_net_v4'
-model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_ghost_net_v4/"
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v9_ssim'
+model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"
+device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
 def evaluate(model, val_loader, device, writer, epoch):
     model.eval()  # Set model to evaluation mode
@@ -95,12 +97,19 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
     # 重新创建 log_dir
     os.makedirs(log_dir)
 
-
     writer = SummaryWriter(log_dir=log_dir)  # TensorBoard SummaryWriter
-    optimizer = optim.Adam(model.parameters(), lr=2e-3)
-    criterion = torch.nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=5e-4)
 
+    # 初始化动态损失
+    fourier_loss = FourierLoss(
+    mse_weight=1.0,
+    fourier_amp_weight=0.5,
+    fourier_phase_weight=0.3,
+    switch_epoch=20,
+    mix_prob=0.5
+    ).to(device)
     model.to(device)
+
     for epoch in range(num_epochs):
         model.train()  # Set model to training mode
         running_loss = 0.0
@@ -115,7 +124,8 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
             # Forward pass
             outputs = model(inputs)
             # Calculate loss
-            loss = criterion(outputs, targets)
+            loss = fourier_loss(outputs, targets, epoch)
+
             running_loss += loss.item()/inputs.shape[0]
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -151,8 +161,8 @@ if __name__ == '__main__':
     # 设置设备为GPU
 
 
-    net = BTM_ghost_UNet_v4(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
-    net.load_weights(os.path.join(model_save_dir, f"checkpoint_epoch_70.pth"))
+    net = BTM_multi_scale_v6(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
+    # net.load_weights(os.path.join(model_save_dir, f"checkpoint_epoch_70.pth"))
     train_loader = dataloaders['train']
     val_loader = dataloaders['val']
 

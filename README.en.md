@@ -90,6 +90,9 @@ docker run --shm-size=8g -d --name liaozhengyan_GPU -p 32956:22 liaozhengyan_gpu
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/data:/home/data -v ~/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/dataset:/home/data -v ~/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/liaozhengyan/dataset:/home/data -v ~/liaozhengyan/code:/home/code -p 32944:22 liaozhengyan_gpu:latestV2
+
+docker run --shm-size=64g --gpus all -d --name liaozhengyan_mamba -v ~/liaozhengyan/dataset:/home/data -v ~/liaozhengyan/code:/home/code -p 32944:22 liaozhengyan_gpu:latest_mamba_xiao
+
 ls -ld ~/liaozhengyan
 sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
 
@@ -157,13 +160,40 @@ val RMSE: 0.0167
 val SSIM: 0.9194
 val PSNR: 35.4381
 ghost v6 在原有v1的基础上将网络加深
-Epoch [659/2000], Train Loss: 0.0000
-val NMSE: 0.0070
-val RMSE: 0.0199
-val SSIM: 0.9224
-val PSNR: 33.8325
+Epoch [491/2000], Train Loss: 0.0000
+val NMSE: 0.0069
+val RMSE: 0.0197
+val SSIM: 0.9254
+val PSNR: 33.9588
 
 multi_scale v7 加入 SSIM loss到训练中：
+Epoch [209/2000], Train Loss: 0.0001
+val NMSE: 0.0058
+val RMSE: 0.0180
+val SSIM: 0.8694
+val PSNR: 34.8455
+
+multi_scale v8 降低 SSIM loss对整体loss的影响
+好像图像过于平滑了
+
+multi_scale v9 降低 SSIM loss对整体loss的影响 在8的基础上引入随机loss
+8的效果训练过程不太稳定
+然后
+Epoch [232/2000], Train Loss: 0.0000
+val NMSE: 0.0073
+val RMSE: 0.0202
+val SSIM: 0.8802
+val PSNR: 33.8484
+Epoch [407/2000], Train Loss: 0.0000
+val NMSE: 0.0063
+val RMSE: 0.0187
+val SSIM: 0.9213
+val PSNR: 34.4562
+Epoch [682/2000], Train Loss: 0.0000
+val NMSE: 0.0060
+val RMSE: 0.0183
+val SSIM: 0.9278
+val PSNR: 34.6751
 
 
 无人机 采购 到货
@@ -179,6 +209,8 @@ docker run --shm-size=16g --gpus all -d --name deep_au_test  deep_au:v1
 
 
 
-
+echo "export PYTHONPATH=\$PYTHONPATH:/home/code/radio_map_construction" >> ~/.bashrc
+source ~/.bashrc
+python3 /home/code/radio_map_construction/train/model_train_multiscale_v8.py
 
 
