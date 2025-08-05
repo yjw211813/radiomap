@@ -99,7 +99,13 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
     os.makedirs(log_dir)
 
     writer = SummaryWriter(log_dir=log_dir)  # TensorBoard SummaryWriter
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(
+        params=model.parameters(),
+        lr=1e-4,                   # 学习率
+        betas=(0.9, 0.999),         # 动量参数
+        weight_decay=0,          # L2正则化
+        amsgrad=False               # 不使用AMSGrad
+    )
 
     # 初始化动态损失
     criterion = torch.nn.MSELoss()
