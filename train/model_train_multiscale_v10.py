@@ -103,11 +103,11 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
     # 初始化动态损失
     fourier_loss = FourierLoss(
-    mse_weight=1.0,
+    mse_weight=0.6,
     fourier_amp_weight=0.3,
     fourier_phase_weight=0.1,
     switch_epoch=5,
-    mix_prob=0.1
+    mix_prob=1
     ).to(device)
     model.to(device)
 

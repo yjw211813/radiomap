@@ -21,9 +21,9 @@ C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
 log_dir = r'/home/code/radio_map_construction/runs/model_val_log/BTM_multi_scale_v8_ssim'
-model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"
-pth_string = f"checkpoint_epoch_20.pth"
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v8_ssim/"
+pth_string = f"checkpoint_epoch_420.pth"
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 

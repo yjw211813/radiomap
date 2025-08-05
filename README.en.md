@@ -179,6 +179,11 @@ multi_scale v8 降低 SSIM loss对整体loss的影响
 multi_scale v9 降低 SSIM loss对整体loss的影响 在8的基础上引入随机loss
 8的效果训练过程不太稳定
 然后
+Epoch [1848/2000], Train Loss: 0.0000
+val NMSE: 0.0060
+val RMSE: 0.0183
+val SSIM: 0.9333
+val PSNR: 34.6058
 
 Epoch [682/2000], Train Loss: 0.0000
 val NMSE: 0.0060
@@ -196,6 +201,11 @@ val NMSE: 0.0054
 val RMSE: 0.0175
 val SSIM: 0.9374
 val PSNR: 35.0713
+Epoch [854/2000], Train Loss: 0.0021
+val NMSE: 0.0119
+val RMSE: 0.0259
+val SSIM: 0.9775
+val PSNR: 31.6579
 
 Epoch [11/2000], Train Loss: 0.0014
 val NMSE: 0.0067
@@ -235,5 +245,12 @@ docker run --shm-size=16g --gpus all -d --name deep_au_test  deep_au:v1
 echo "export PYTHONPATH=\$PYTHONPATH:/home/code/radio_map_construction" >> ~/.bashrc
 source ~/.bashrc
 python3 /home/code/radio_map_construction/train/model_train_multiscale_v8.py
+
+
+# 出现的问题
+加入傅里叶损失和小波损失
+1.出现频域和小波域的幅度对应不上
+2.两个损失非线性程度太高，不收敛
+
 
 

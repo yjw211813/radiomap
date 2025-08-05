@@ -5,7 +5,7 @@ from torchmetrics.functional import structural_similarity_index_measure as ssim
 from torchmetrics.functional import peak_signal_noise_ratio as psnr
 from model.sub_block.metric_fun import SSIMLoss
 import torch.nn.functional as F
-
+from pytorch_wavelets import DWTForward
 
 
 
@@ -199,8 +199,6 @@ def FourierLoss_test():
 
     loss = fourierLoss(outputs, targets, 20)
     print("Output shape:", loss.item())
-
-
 
 
 class MaskFourierLoss(nn.Module):
@@ -403,7 +401,192 @@ def MaskFourierLoss_test():
     loss = maskFourierLoss(outputs, targets, 20)
     print("Output shape:", loss.item())
 
+
+class WaveletLoss(nn.Module):
+    def __init__(self,
+                 mse_weight: float = 1.0,
+                 wavelet_amp_weight: float = 0.4,
+                 wavelet_phase_weight: float = 0.1,
+                 switch_epoch: int = 10,
+                 mix_prob: float = 0.2,
+                 wavelet: str = 'db1',
+                 levels: int = 3,
+                 log_amp: bool = True,
+                 eps: float = 1e-8):
+        """
+        动态混合损失函数，结合像素级MSE损失和小波域损失
+
+        参数:
+            mse_weight (float): MSE损失的权重因子
+            wavelet_amp_weight (float): 小波振幅损失的权重因子
+            wavelet_phase_weight (float): 小波相位损失的权重因子
+            switch_epoch (int): 开始使用小波损失的训练轮次
+            mix_prob (float): 使用混合损失的概率 [0.0, 1.0]
+            wavelet (str): 使用的小波类型 (默认'db1')
+            levels (int): 小波分解的层数
+            log_amp (bool): 是否对振幅应用对数变换
+            eps (float): 数值稳定性参数，防止log(0)
+        """
+        super(WaveletLoss, self).__init__()
+        self.mse = nn.MSELoss()
+
+        # 初始化小波变换
+        self.dwt = DWTForward(wave=wavelet, J=levels, mode='zero')
+
+        # 权重参数
+        self.mse_weight = mse_weight
+        self.wavelet_amp_weight = wavelet_amp_weight
+        self.wavelet_phase_weight = wavelet_phase_weight
+
+        # 训练控制参数
+        self.switch_epoch = switch_epoch
+        self.mix_prob = mix_prob
+        self.log_amp = log_amp
+        self.eps = eps
+        self.levels = levels
+
+        # 验证参数有效性
+        self._validate_parameters()
+
+    def _validate_parameters(self):
+        """验证输入参数的有效性"""
+        assert 0 <= self.mix_prob <= 1.0, "mix_prob 必须在 [0, 1] 范围内"
+        assert self.switch_epoch >= 0, "switch_epoch 必须是非负整数"
+        assert self.mse_weight >= 0, "mse_weight 必须是非负数"
+        assert self.wavelet_amp_weight >= 0, "wavelet_amp_weight 必须是非负数"
+        assert self.wavelet_phase_weight >= 0, "wavelet_phase_weight 必须是非负数"
+        assert self.levels > 0, "分解层数必须大于0"
+
+    def _compute_wavelet_loss(self, outputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """
+        计算小波域损失（振幅 + 相位）
+
+        参数:
+            outputs: 模型输出张量 (B, C, H, W)
+            targets: 目标张量 (B, C, H, W)
+
+        返回:
+            小波域损失值
+        """
+        # 执行小波变换
+        outputs_coeffs = self.dwt(outputs)
+        targets_coeffs = self.dwt(targets)
+
+        amp_loss = 0.0
+        phase_loss = 0.0
+
+        # 处理低频分量
+        outputs_ll = outputs_coeffs[0]
+        targets_ll = targets_coeffs[0]
+
+        # 低频分量作为实数处理
+        outputs_amp_ll = torch.abs(outputs_ll)
+        targets_amp_ll = torch.abs(targets_ll)
+
+        # 应用对数变换（如果需要）
+        if self.log_amp:
+            outputs_amp_ll = torch.log(outputs_amp_ll + self.eps)
+            targets_amp_ll = torch.log(targets_amp_ll + self.eps)
+
+        # 计算低频振幅损失
+        amp_loss += self.mse(outputs_amp_ll, targets_amp_ll)
+
+        # 处理高频分量
+        outputs_high = outputs_coeffs[1]
+        targets_high = targets_coeffs[1]
+
+        # 遍历所有分解层和高频方向
+        for level in range(self.levels):
+            # 获取当前层的高频系数 (3个方向)
+            outputs_high_level = outputs_high[level]
+            targets_high_level = targets_high[level]
+
+            for direction in range(3):  # 3个方向: LH, HL, HH
+                out_dir = outputs_high_level[:, :, direction]
+                tar_dir = targets_high_level[:, :, direction]
+
+                # 计算振幅（绝对值）
+                out_amp = torch.abs(out_dir)
+                tar_amp = torch.abs(tar_dir)
+
+                # 应用对数变换（如果需要）
+                if self.log_amp:
+                    out_amp = torch.log(out_amp + self.eps)
+                    tar_amp = torch.log(tar_amp + self.eps)
+
+                # 计算相位（角度）
+                out_phase = torch.angle(out_dir)
+                tar_phase = torch.angle(tar_dir)
+
+                # 累加振幅和相位损失
+                amp_loss += self.mse(out_amp, tar_amp)
+                phase_loss += self.mse(out_phase, tar_phase)
+
+        # 计算平均损失（考虑所有分量）
+        num_components = 1 + 3 * self.levels  # 1个低频 + 每层3个高频
+        amp_loss /= num_components
+        phase_loss /= num_components
+
+        # 加权组合小波域损失
+        wavelet_loss = (self.wavelet_amp_weight * amp_loss +
+                        self.wavelet_phase_weight * phase_loss)
+
+        return wavelet_loss
+
+    def forward(self,
+                outputs: torch.Tensor,
+                targets: torch.Tensor,
+                current_epoch: int) -> torch.Tensor:
+        """
+        损失函数前向计算
+
+        参数:
+            outputs: 模型输出张量 (B, C, H, W)
+            targets: 目标张量 (B, C, H, W)
+            current_epoch: 当前训练轮次
+
+        返回:
+            组合损失值
+        """
+        # 基础像素级MSE损失
+        mse_loss = self.mse(outputs, targets) * self.mse_weight
+
+        # 在切换轮次前仅使用MSE损失
+        if current_epoch < self.switch_epoch:
+            return mse_loss
+
+        # 在切换轮次后，按概率混合损失
+        if random.random() < self.mix_prob:
+            # 计算小波域损失
+            wavelet_loss = self._compute_wavelet_loss(outputs, targets)
+
+            # 组合总损失
+            total_loss = mse_loss + wavelet_loss
+            return total_loss
+
+        # 不使用小波损失的情况
+        return mse_loss
+
+def WaveletLoss_test():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    targets = torch.randn(32, 1, 256, 256)
+    outputs = torch.randn(32, 1, 256, 256)
+    maskFourierLoss = WaveletLoss(
+        mse_weight=1.0,
+        wavelet_amp_weight=0.1,
+        wavelet_phase_weight=0.025,
+        switch_epoch=5,
+        mix_prob=0.05,
+        wavelet='db1',
+        levels=3
+    ).to(device)
+
+    loss = maskFourierLoss(outputs, targets, 20)
+    print("Output shape:", loss.item())
+
+
 if __name__ == '__main__':
-    DynamicLoss_test()
-    FourierLoss_test()
-    MaskFourierLoss_test()
+    # DynamicLoss_test()
+    # FourierLoss_test()
+    # MaskFourierLoss_test()
+    WaveletLoss_test()
