@@ -18,13 +18,13 @@ class DynamicLRScheduler(_LRScheduler):
     """
 
     def __init__(self, optimizer, lr_min, lr_max, warmup_epochs=5,
-                 decay_epochs=20, last_epoch=-1, verbose=False):
+                 decay_epochs=20, last_epoch=-1):
         self.lr_min = lr_min
         self.lr_max = lr_max
         self.warmup_epochs = warmup_epochs
         self.decay_epochs = decay_epochs
         self.total_epochs = warmup_epochs + decay_epochs
-        super().__init__(optimizer, last_epoch, verbose)
+        super().__init__(optimizer, last_epoch)
 
     def get_lr(self):
         """计算当前 epoch 的学习率"""
@@ -72,13 +72,22 @@ if __name__ == "__main__":
     # 3. 训练循环
     num_epochs = 25
     for epoch in range(num_epochs):
-        # 训练步骤...
-        # loss.backward()
-        # optimizer.step()
+        # 模拟训练步骤
+        inputs = torch.randn(32, 10)
+        targets = torch.randn(32, 1)
 
-        # 更新学习率
+        # 训练步骤
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = torch.nn.MSELoss()(outputs, targets)
+        loss.backward()
+
+        # 先更新参数
+        optimizer.step()
+
+        # 再更新学习率（在每个epoch结束时）
         scheduler.step()
 
-        # 打印当前学习率
-        current_lr = optimizer.param_groups[0]['lr']
+        # 使用正确方法获取学习率
+        current_lr = scheduler.get_last_lr()[0]
         print(f"Epoch {epoch + 1}/{num_epochs} \t Learning Rate: {current_lr:.2e}")
