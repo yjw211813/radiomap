@@ -252,5 +252,8 @@ python3 /home/code/radio_map_construction/train/model_train_multiscale_v8.py
 1.出现频域和小波域的幅度对应不上
 2.两个损失非线性程度太高，不收敛
 
+# 现在发现应该采用学习率调度策略来对模型进行调优
+并且应该赶紧实现一些基准模型
+然后进行实验对比
 
 

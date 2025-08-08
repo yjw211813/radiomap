@@ -3,6 +3,7 @@ from model.sigle_Unet.BTM_multi_scale_v6 import BTM_multi_scale_v6
 import torch.nn as nn
 from torchmetrics.functional import structural_similarity_index_measure as ssim
 from model.sub_block.loss_cal import DynamicLoss,FourierLoss
+from model.sub_block.optimizer_schedule import DynamicLRScheduler
 from torchmetrics.functional import peak_signal_noise_ratio as psnr
 import torch
 from torch.utils.data import DataLoader
@@ -99,6 +100,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
     os.makedirs(log_dir)
 
     writer = SummaryWriter(log_dir=log_dir)  # TensorBoard SummaryWriter
+
     optimizer = optim.Adam(
         params=model.parameters(),
         lr=1e-4,                   # 学习率
@@ -106,16 +108,19 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
         weight_decay=0,          # L2正则化
         amsgrad=False               # 不使用AMSGrad
     )
+    warmup_epochs = 30
+    scheduler = DynamicLRScheduler(
+        optimizer,
+        lr_min=1e-6,  # 最小学习率
+        lr_max=1e-3,  # 最大学习率
+        warmup_epochs=warmup_epochs,  # 前warmup_epochs个epoch学习率上升
+        decay_epochs=num_epochs - warmup_epochs  # 后面epoch学习率下降
+    )
 
     # 初始化动态损失
     criterion = torch.nn.MSELoss()
-    # fourier_loss = FourierLoss(
-    # mse_weight=0.6,
-    # fourier_amp_weight=0.3,
-    # fourier_phase_weight=0.1,
-    # switch_epoch=5,
-    # mix_prob=1
-    # ).to(device)
+
+
     model.to(device)
 
     for epoch in range(num_epochs):
@@ -141,6 +146,9 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
             loss.backward()
             optimizer.step()
 
+        # 再更新学习率（在每个epoch结束时）
+        scheduler.step()
+
         avg_loss = running_loss / len(train_loader)
         print(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {avg_loss:.4f}")
         # Write loss to TensorBoard
@@ -156,7 +164,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
 
 if __name__ == '__main__':
-
+    print("训练13 使用学习率调度器")
     Radio_train = RadioUNet_c_sprseIRT4(phase="train", carsSimul="yes", carsInput="yes")
     Radio_val = RadioUNet_c_sprseIRT4(phase="val", carsSimul="yes", carsInput="yes")
     Radio_test = RadioUNet_c_sprseIRT4(phase="test", carsSimul="yes", carsInput="yes")
@@ -171,10 +179,10 @@ if __name__ == '__main__':
 
 
     net = BTM_multi_scale_v6(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
-    net.load_weights(os.path.join(model_load_dir, f"checkpoint_epoch_210.pth"))
+    # net.load_weights(os.path.join(model_load_dir, f"checkpoint_epoch_210.pth"))
     train_loader = dataloaders['train']
     val_loader = dataloaders['val']
 
     # 开始训练
-    train(net, train_loader, val_loader, num_epochs=2000, device=device, save_interval=5)
+    train(net, train_loader, val_loader, num_epochs=600, device=device, save_interval=5)
 
