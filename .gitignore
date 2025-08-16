@@ -11,3 +11,6 @@
 *.synctex.gz
 # 生成的PDF
 *.pdf
+*.bbl
+/data/RadioMapSeer.zip
+/data/RadioMapSeer
