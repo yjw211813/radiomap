@@ -139,7 +139,7 @@ def train_model(device,model, optimizer, scheduler,dataloaders, num_epochs=50, W
 if __name__ == "__main__":
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+    print(device)
     # 读取数据
     Radio_train = loaders.RadioUNet_c(phase="train")
     Radio_val = loaders.RadioUNet_c(phase="val")
@@ -169,10 +169,9 @@ if __name__ == "__main__":
 
     model = train_model(device,model, optimizer_ft, exp_lr_scheduler,dataloaders)
 
-    try:
-        os.mkdir(model_save_dir)
-    except OSError as error:
-        print(error)
+
+    os.makedirs(model_save_dir, exist_ok=True)
+
     # 保存第一个UNet的权重
     torch.save(model.state_dict(), os.path.join(model_save_dir, f"Trained_Model_FirstU.pt"))
  

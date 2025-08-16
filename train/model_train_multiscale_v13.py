@@ -24,7 +24,7 @@ C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
 log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v9_ssim'
-model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v6_ssim/"
+model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"
 model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"
 device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
@@ -108,11 +108,11 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
         weight_decay=0,          # L2正则化
         amsgrad=False               # 不使用AMSGrad
     )
-    warmup_epochs = 30
+    warmup_epochs = 100
     scheduler = DynamicLRScheduler(
         optimizer,
         lr_min=1e-6,  # 最小学习率
-        lr_max=1e-3,  # 最大学习率
+        lr_max=5e-4,  # 最大学习率
         warmup_epochs=warmup_epochs,  # 前warmup_epochs个epoch学习率上升
         decay_epochs=num_epochs - warmup_epochs  # 后面epoch学习率下降
     )
@@ -179,10 +179,10 @@ if __name__ == '__main__':
 
 
     net = BTM_multi_scale_v6(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
-    # net.load_weights(os.path.join(model_load_dir, f"checkpoint_epoch_210.pth"))
+    net.load_weights(os.path.join(model_load_dir, f"checkpoint_epoch_600.pth"))
     train_loader = dataloaders['train']
     val_loader = dataloaders['val']
 
     # 开始训练
-    train(net, train_loader, val_loader, num_epochs=600, device=device, save_interval=5)
+    train(net, train_loader, val_loader, num_epochs=1000, device=device, save_interval=5)
 

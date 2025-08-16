@@ -77,13 +77,15 @@ def test_loss(device, model, Radio_test, batch_size, error="MSE", dataset="coars
     model.eval()  # 设置模型为评估模式（关闭dropout等）
     metrics = defaultdict(float)  # 初始化指标字典
     epoch_samples = 0  # 总样本计数器
+    # 修复：强制 generator 使用 CPU
+    generator = torch.Generator(device='cpu')  # 关键修复
 
     # 根据数据集类型选择数据加载方式
     if dataset == "coarse":
         dataloader = DataLoader(Radio_test, batch_size=batch_size, shuffle=True,
-                                num_workers=1, generator=torch.Generator(device=device))
+                                num_workers=1, generator=generator)
     elif dataset == "fine":
-        dataloader = DataLoader(Radio_test, batch_size=batch_size, shuffle=True, num_workers=1, generator=torch.Generator(device=device))
+        dataloader = DataLoader(Radio_test, batch_size=batch_size, shuffle=True, num_workers=1, generator=generator)
 
     # 禁用梯度计算以加速测试
     with torch.no_grad():
@@ -114,16 +116,19 @@ def test_loss(device, model, Radio_test, batch_size, error="MSE", dataset="coars
 
 # 主程序入口
 if __name__ == "__main__":
-    # 1. 加载测试数据集
-    Radio_test = loaders.RadioUNet_c_sprseIRT4(phase="test")
-
     # 2. 设置超参数
     batch_size = 15
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # 1. 加载测试数据集
+    Radio_test = loaders.RadioUNet_c(phase="test")
+
+
 
     # 3. 初始化模型（选择第二阶段U-Net）
     model = modules.RadioWNet(phase="secondU")
-    model.load_state_dict(os.path.join(model_save_dir, "Trained_Model_SecondU.pt"))
+    state_dict = torch.load(os.path.join(model_save_dir, "Trained_Model_SecondU.pt"), map_location=device)
+    model.load_state_dict(state_dict)
+    print("pt load sucess")
     model.to(device)  # 将模型移至计算设备
 
 
