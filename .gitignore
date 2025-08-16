@@ -5,3 +5,9 @@
 /.idea
 *.png
 *.pyc
+# LaTeX 临时文件
+*.aux
+*.log
+*.synctex.gz
+# 生成的PDF
+*.pdf
