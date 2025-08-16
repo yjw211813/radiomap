@@ -21,18 +21,20 @@ warnings.filterwarnings("ignore")
 # 调试目录
 class RadioUNet_c(Dataset):
     """RadioMapSeer Loader for accurate buildings and no measurements (RadioUNet_c)"""
-    def __init__(self,maps_inds=np.zeros(1), phase="train",
-                 ind1=0,ind2=0, 
-                 dir_dataset=r"C:/Users/Administrator/Desktop/second/radio_map_construction/data/RadioMapSeer",
-                 numTx=80,                  
-                 thresh=0.05,
-                 simulation="DPM",
-                 carsSimul="no",
-                 carsInput="no",
-                 IRT2maxW=1,
-                 cityMap="complete",
-                 missing=1,
-                 transform= transforms.ToTensor()):
+    """RadioMapSeer数据集加载器，用于精确建筑物建模和无测量数据的无线电地图构建（RadioUNet_c）"""
+    def __init__(self,maps_inds=np.zeros(1),# 可选的地图索引序列，默认为0（使用标准划分）
+                 phase="train",             # 数据集阶段："train", "val", "test", "custom"
+                 ind1=0,ind2=0,             # 自定义范围时使用的起始和结束索引
+                 dir_dataset=r"C:/Users/Administrator/Desktop/second/radio_map_construction/data/RadioMapSeer",# 数据集根目录
+                 numTx=80,                  # 每个地图的发射器数量（最大80）
+                 thresh=0.05,               # 路径损耗阈值（0-1），默认0.05
+                 simulation="DPM",          # 模拟类型："DPM", "IRT2", "rand"
+                 carsSimul="no",            # 是否在模拟中包含车辆："yes"/"no"
+                 carsInput="no",            # 输入是否包含车辆通道："yes"/"no"
+                 IRT2maxW=1,                # 随机模拟时IRT2的最大权重
+                 cityMap="complete",        # 城市地图类型：complete, "missing", "rand"
+                 missing=1,                 # 缺失建筑物数量（1-4）
+                 transform= transforms.ToTensor()):# 图像转换方法
         """
         Args:
             maps_inds: optional shuffled sequence of the maps. Leave it as maps_inds=0 (default) for the standart split.
@@ -201,16 +203,13 @@ class RadioUNet_c(Dataset):
 
 
         return [inputs, image_gain]
-    
-    
-    
-    
+
 
 class RadioUNet_c_sprseIRT4(Dataset):
     """RadioMapSeer Loader for accurate buildings and no measurements (RadioUNet_c)"""
     def __init__(self,maps_inds=np.zeros(1), phase="train",
                  ind1=0,ind2=0, 
-                 dir_dataset="/home/data/path_loss_data/RadioSeer/RadioMapSeer/",
+                 dir_dataset=r"C:/Users/Administrator/Desktop/second/radio_map_construction/data/RadioMapSeer/",
                  numTx=2,                  
                  thresh=0.2,
                  simulation="IRT4",
@@ -393,18 +392,13 @@ class RadioUNet_c_sprseIRT4(Dataset):
 
 
         return [inputs, image_gain, image_samples]
-    
-    
-    
-    
-    
-    
-    
+
+
 class RadioUNet_s(Dataset):
     """RadioMapSeer Loader for accurate buildings and no measurements (RadioUNet_c)"""
     def __init__(self,maps_inds=np.zeros(1), phase="train",
                  ind1=0,ind2=0, 
-                 dir_dataset="/home/data/path_loss_data/RadioSeer/RadioMapSeer/",
+                 dir_dataset=r"C:/Users/Administrator/Desktop/second/radio_map_construction/data/RadioMapSeer/",
                  numTx=80,                  
                  thresh=0.2,
                  simulation="DPM",
@@ -605,15 +599,12 @@ class RadioUNet_s(Dataset):
 
         return [inputs, image_gain]
     
-    
-    
-    
 
 class RadioUNet_s_sprseIRT4(Dataset):
     """RadioMapSeer Loader for accurate buildings and no measurements (RadioUNet_c)"""
     def __init__(self,maps_inds=np.zeros(1), phase="train",
                  ind1=0,ind2=0, 
-                 dir_dataset="/home/data/path_loss_data/RadioSeer/RadioMapSeer/",
+                 dir_dataset=r"C:/Users/Administrator/Desktop/second/radio_map_construction/data/RadioMapSeer/",
                  numTx=2,                  
                  thresh=0.2,
                  simulation="IRT4",
