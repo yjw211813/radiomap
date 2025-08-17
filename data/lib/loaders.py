@@ -26,14 +26,14 @@ class RadioUNet_c(Dataset):
     def __init__(self,maps_inds=np.zeros(1),# 可选的地图索引序列，默认为0（使用标准划分）
                  phase="train",             # 数据集阶段："train", "val", "test", "custom"
                  ind1=0,ind2=0,             # 自定义范围时使用的起始和结束索引
-                 dir_dataset=r"/home/data/path_loss_data/RadioSeer/RadioMapSeer",# 数据集根目录
+                 dir_dataset=r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",# 数据集根目录
                  numTx=80,                  # 每个地图的发射器数量（最大80）
                  thresh=0.05,               # 路径损耗阈值（0-1），默认0.05
-                 simulation="DPM",          # 模拟类型："DPM", "IRT2", "rand"
-                 carsSimul="no",            # 是否在模拟中包含车辆："yes"/"no"
-                 carsInput="no",            # 输入是否包含车辆通道："yes"/"no"
+                 simulation="rand",          # 模拟类型："DPM", "IRT2", "rand"
+                 carsSimul="yes",            # 是否在模拟中包含车辆："yes"/"no"
+                 carsInput="yes",            # 输入是否包含车辆通道："yes"/"no"
                  IRT2maxW=1,                # 随机模拟时IRT2的最大权重
-                 cityMap="complete",        # 城市地图类型：complete, "missing", "rand"
+                 cityMap="rand",        # 城市地图类型：complete, "missing", "rand"
                  missing=1,                 # 缺失建筑物数量（1-4）
                  transform= transforms.ToTensor()):# 图像转换方法
         """
@@ -228,8 +228,8 @@ class RadioUNet_c_sprseIRT4(Dataset):
                  ind1=0,ind2=0,         # 自定义范围时使用的起始和结束索引
                  dir_dataset=r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",# 数据集根目录
                  numTx=2,               # 每个地图的发射器数量（注意：IRT4最多支持2个发射器）
-                 thresh=0.2,            # 路径损耗阈值（0-1），默认0.2
-                 simulation="IRT4",     # 模拟类型："IRT4", "DPM", "IRT2"
+                 thresh=0.05,            # 路径损耗阈值（0-1），默认0.2
+                 simulation="DPM",     # 模拟类型："IRT4", "DPM", "IRT2"
                  carsSimul="yes",       # 是否在模拟中包含车辆："yes"/"no"
                  carsInput="yes",       # 输入是否包含车辆通道："yes"/"no"
                  cityMap="complete",    # 城市地图类型："complete", "missing", "rand"
@@ -413,7 +413,7 @@ class RadioUNet_c_sprseIRT4(Dataset):
             image_samples = self.transform(image_samples).type(torch.float32)
 
 
-        return [inputs, image_gain, image_samples]
+        return inputs, image_gain, image_samples
 
 
 class RadioUNet_s(Dataset):
@@ -844,233 +844,186 @@ class RadioUNet_s_sprseIRT4(Dataset):
 
 
         return [inputs, image_gain, sparse_samples]
-    
-"""
-simuSetDict = {
-    "ind1": 1,
-    "ind2": 2,
-    "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",
-    "numTx": 80,
-    "thresh": 0.2,
-    "simulation": "DPM",  # 模拟类型："DPM", "IRT2", "rand"
-    "carsSimul": "no",
-    "carsInput": "no",
-    "IRT2maxW": 1,
-    "cityMap": "complete",
-    "missing": 1,
-    "fix_samples": 0,
-    "num_samples_low": 10,
-    "num_samples_high": 300
-}
-"""
+
 
 
 
 
 class RadioMapSeerLoader(Dataset):
     def __init__(self,
-                 simuSetDict ,
-                 maps_inds=np.zeros(1), # 可选的地图索引序列，默认为0（使用标准划分）
-                 phase="train",         # 数据集阶段："train", "val", "test", "custom"
-                 transform= transforms.ToTensor()):
+                 simuSetDict,
+                 maps_inds=np.zeros(1),  # 可选的地图索引序列，默认为0（使用标准划分）
+                 phase="train",  # 数据集阶段："train", "val", "test", "custom"
+                 transform=transforms.ToTensor()):
+
+        # 将设置字典中的参数转为类属性
+        for key, value in simuSetDict.items():
+            setattr(self, key, value)
 
         # 数据集对象初始化
-        self.simuSetDict = simuSetDict  # 得到设置字典
-        self. init_index(maps_inds,phase)
-        self.get_dir_gain()     # 得到当前增益路径
-        self.get_dir_building() # 得到建筑物的路径
-        self.get_dir_Tx()       # 得到发射源位置图像信息的路径
-        self.get_dir_cars()     # 得到小车图像信息的路径
-        self.transform = transform         # 得到数据预处理方式
+        self.simuSetDict = simuSetDict  # 保留设置字典
+        self._init_index(maps_inds, phase)
+        self._setup_directories()  # 统一设置所有目录
+        self.transform = transform  # 数据预处理方式
+        if self.simulation == "IRT4":
+            if self.numTx>2:
+                self.numTx = 2
         self.height = 256
         self.width = 256
 
-
-
-
-    def init_index(self,maps_inds,phase):
+    def _init_index(self, maps_inds, phase):
+        """初始化地图索引和数据集范围"""
         if maps_inds.size == 1:
             self.maps_inds = np.arange(0, 700, 1, dtype=np.int16)
-            # Determenistic "random" shuffle of the maps:
             np.random.seed(42)
             np.random.shuffle(self.maps_inds)
         else:
             self.maps_inds = maps_inds
 
         if phase == "train":
-            self.ind1 = 0
-            self.ind2 = 500
+            self.ind1, self.ind2 = 0, 500
         elif phase == "val":
-            self.ind1 = 501
-            self.ind2 = 600
+            self.ind1, self.ind2 = 501, 600
         elif phase == "test":
-            self.ind1 = 601
-            self.ind2 = 699
+            self.ind1, self.ind2 = 601, 699
         else:  # custom range
-            self.ind1 = self.simuSetDict["ind1"]
-            self.ind2 = self.simuSetDict["ind2"]
+            self.ind1 = self.ind1 if hasattr(self, 'ind1') else self.simuSetDict.get("ind1", 0)
+            self.ind2 = self.ind2 if hasattr(self, 'ind2') else self.simuSetDict.get("ind2", 0)
 
-    def get_dir_gain(self):
-        if self.simuSetDict["simulation"] == "IRT4":
-            if self.simuSetDict["carsSimul"] == "no":
-                self.dir_gain = self.simuSetDict["dir_dataset"] + "gain/IRT4/"
-            else:
-                self.dir_gain = self.simuSetDict["dir_dataset"] + "gain/carsIRT4/"
+    def _setup_directories(self):
+        """统一设置所有需要的目录路径"""
+        # 增益图目录
+        if self.simulation == "IRT4":
+            base = "carsIRT4/" if self.carsSimul == "yes" else "IRT4/"
+            self.dir_gain = os.path.join(self.dir_dataset, "gain", base)
+        elif self.simulation == "DPM":
+            base = "carsDPM/" if self.carsSimul == "yes" else "DPM/"
+            self.dir_gain = os.path.join(self.dir_dataset, "gain", base)
+        elif self.simulation == "IRT2":
+            base = "carsIRT2/" if self.carsSimul == "yes" else "IRT2/"
+            self.dir_gain = os.path.join(self.dir_dataset, "gain", base)
 
-        elif self.simuSetDict["simulation"]  == "DPM":
-            if self.simuSetDict["carsSimul"] == "no":
-                self.dir_gain = self.simuSetDict["dir_dataset"] + "gain/DPM/"
-            else:
-                self.dir_gain = self.simuSetDict["dir_dataset"] + "gain/carsDPM/"
-        elif self.simuSetDict["simulation"]  == "IRT2":
-            if self.simuSetDict["carsSimul"] == "no":
-                self.dir_gain = self.simuSetDict["dir_dataset"] + "gain/IRT2/"
-            else:
-                self.dir_gain = self.simuSetDict["dir_dataset"] + "gain/carsIRT2/"
+        # 为随机模拟模式准备备用目录
+        if self.simulation == "rand" or not hasattr(self, 'dir_gain'):
+            base = "cars" if self.carsSimul == "yes" else ""
+            self.dir_gainDPM = os.path.join(self.dir_dataset, "gain", f"{base}DPM/")
+            self.dir_gainIRT2 = os.path.join(self.dir_dataset, "gain", f"{base}IRT2/")
 
-        if self.simuSetDict["carsSimul"] == "no":
-            self.dir_gainDPM = self.simuSetDict["dir_dataset"] + "gain/DPM/"
-            self.dir_gainIRT2 = self.simuSetDict["dir_dataset"] + "gain/IRT2/"
-        else:
-            self.dir_gainDPM = self.simuSetDict["dir_dataset"] + "gain/carsDPM/"
-            self.dir_gainIRT2 = self.simuSetDict["dir_dataset"] + "gain/carsIRT2/"
-
-
-    def get_dir_building(self):
-        if self.simuSetDict["cityMap"]=="complete":
-            self.dir_buildings=self.simuSetDict["dir_dataset"]+"png/buildings_complete/" # 缺失建筑物模式
-        else:
-            self.dir_buildings = self.simuSetDict["dir_dataset"]+"png/buildings_missing" #后续会随机加一个随机丢失索引到代码中
-
-    def get_dir_Tx(self):
-        self.dir_Tx = self.simuSetDict["dir_dataset"] + "png/antennas/"
-
-    def get_dir_cars(self):
-        self.dir_cars = self.simuSetDict["dir_dataset"] + "png/cars/"
-
-
-    def get_image_gain(self,index):
-        # 计算信源索引
-        idxr=np.floor(index/self.simuSetDict["numTx"]).astype(int)               # 地图索引
-        idxc=index-idxr*self.simuSetDict["numTx"]                                # 发射器索引
-        dataset_map_ind=self.maps_inds[idxr+self.ind1]+1        # 实际地图编号（+1因为文件从1开始）
-        source_name = str(dataset_map_ind) + "_" + str(idxc) + ".png"# 发射器相关文件
-
-        # 如果使用rand模式则会进行两种方法的融合
-        if self.simuSetDict["simulation"] != "rand":
-            img_name_gain = os.path.join(self.dir_gain, source_name)
-            image_gain = np.expand_dims(np.asarray(io.imread(img_name_gain)), axis=2) / 255
-        else:
-
-            # 随机混合DPM和IRT2 对两种增益进行随机权重加权 IRT2的最大权重可设置为IRT2maxW
-            img_name_gainDPM = os.path.join(self.dir_gainDPM, source_name)
-            img_name_gainIRT2 = os.path.join(self.dir_gainIRT2, source_name)
-            w = np.random.uniform(0, self.simuSetDict["IRT2maxW"])  # IRT2 weight of random average # 随机权重
-            image_gain = w * np.expand_dims(np.asarray(io.imread(img_name_gainIRT2)), axis=2) / 256 \
-                         + (1 - w) * np.expand_dims(np.asarray(io.imread(img_name_gainDPM)), axis=2) / 256
-
-        # pathloss threshold transform
-        # 路径损耗阈值处理
-        if self.simuSetDict["thresh"] > 0:
-            mask = image_gain < self.simuSetDict["thresh"]
-            image_gain[mask] = self.simuSetDict["thresh"]
-            image_gain = image_gain - self.simuSetDict["thresh"] * np.ones(np.shape(image_gain))
-            image_gain = image_gain / (1 - self.simuSetDict["thresh"])
-
-        image_gain = image_gain * 256
-
-        return image_gain
-
-    def get_image_buildings(self,index):
-        # 计算地图索引
-        idxr=np.floor(index/self.simuSetDict["numTx"]).astype(int)               # 地图索引                           # 发射器索引
-        dataset_map_ind=self.maps_inds[idxr+self.ind1]+1        # 实际地图编号（+1因为文件从1开始）
-        map_name = str(dataset_map_ind) + ".png"
-        # Load buildings:
+        # 建筑物目录
         if self.cityMap == "complete":
-            img_name_buildings = os.path.join(self.dir_buildings, map_name)
+            self.dir_buildings = os.path.join(self.dir_dataset, "png", "buildings_complete/")
         else:
-            if self.cityMap == "rand":
-                self.missing = np.random.randint(low=1, high=5)
-            version = np.random.randint(low=1, high=7)
-            img_name_buildings = os.path.join(self.dir_buildings + str(self.missing) + "/" + str(version) + "/", map_name)
+            self.dir_buildings = os.path.join(self.dir_dataset, "png", "buildings_missing")
 
-        image_buildings = np.asarray(io.imread(img_name_buildings))  # Will be normalized later, after random seed is computed from it
-        image_buildings = image_buildings / 256
+        # 发射器和车辆目录
+        self.dir_Tx = os.path.join(self.dir_dataset, "png", "antennas/")
+        if self.carsInput != "no":
+            self.dir_cars = os.path.join(self.dir_dataset, "png", "cars/")
 
-        return image_buildings
+    def _get_map_and_source_index(self, index):
+        """计算地图索引和发射器索引"""
+        idxr = np.floor(index / self.numTx).astype(int)  # 地图索引
+        idxc = index - idxr * self.numTx  # 发射器索引
+        dataset_map_ind = self.maps_inds[idxr + self.ind1] + 1  # 实际地图编号
+        return dataset_map_ind, idxc
 
-    def get_image_Tx(self,index):
-        # 计算信源索引
-        idxr=np.floor(index/self.simuSetDict["numTx"]).astype(int)               # 地图索引
-        idxc=index-idxr*self.simuSetDict["numTx"]                                # 发射器索引
-        dataset_map_ind=self.maps_inds[idxr+self.ind1]+1        # 实际地图编号（+1因为文件从1开始）
-        source_name = str(dataset_map_ind) + "_" + str(idxc) + ".png"# 发射器相关文件
-        img_name_Tx = os.path.join(self.dir_Tx, source_name)
-        image_Tx = np.asarray(io.imread(img_name_Tx)) / 256
+    def _load_gain_map(self, source_name):
+        """加载并处理增益图"""
+        if self.simulation != "rand":
+            img_path = os.path.join(self.dir_gain, source_name)
+            image_gain = np.expand_dims(io.imread(img_path), axis=2) / 256.0
+        else:
+            # 随机混合DPM和IRT2
+            img_path_dpm = os.path.join(self.dir_gainDPM, source_name)
+            img_path_irt2 = os.path.join(self.dir_gainIRT2, source_name)
+            w = np.random.uniform(0, self.IRT2maxW)
+            gain_dpm = np.expand_dims(io.imread(img_path_dpm), axis=2) / 256.0
+            gain_irt2 = np.expand_dims(io.imread(img_path_irt2), axis=2) / 256.0
+            image_gain = w * gain_irt2 + (1 - w) * gain_dpm
 
-        return image_Tx
+        # 路径损耗阈值处理
+        if self.thresh > 0:
+            mask = image_gain < self.thresh
+            image_gain[mask] = self.thresh
+            image_gain = (image_gain - self.thresh) / (1 - self.thresh)
 
-    def get_input_samples(self,image_gain):
+        return image_gain * 256  # 统一缩放
 
-        # input samples from the sparse gain samples
-        image_samples = np.zeros((256,256)) # 创建全零采样图
+    def _load_buildings_map(self, map_name):
+        """加载建筑物地图"""
+        if self.cityMap == "complete":
+            img_path = os.path.join(self.dir_buildings, map_name)
+            return io.imread(img_path) / 256.0
+
+        # 处理缺失建筑物的情况
+        missing_val = np.random.randint(1, 5) if self.cityMap == "rand" else self.missing
+        version = np.random.randint(1, 7)
+        dir_path = os.path.join(self.dir_buildings+str(missing_val), str(version))
+        img_path = os.path.join(dir_path, map_name)
+        return io.imread(img_path) / 256.0
+
+    def _load_transmitter_map(self, source_name):
+        """加载发射器位置图"""
+        img_path = os.path.join(self.dir_Tx, source_name)
+        return io.imread(img_path) / 256.0
+
+    def _create_input_samples(self, image_gain):
+        """创建输入采样点图"""
+        image_samples = np.zeros((self.height, self.width))
+
         # 确定采样点数
-        if self.simuSetDict["fix_samples"]==0:# 随机采样点数
-            num_samples=np.random.randint(self.simuSetDict["num_samples_low"], self.simuSetDict["num_samples_high"], size=1)
-        else:# 固定采样点数
-            num_samples=np.floor(self.simuSetDict["fix_samples"]).astype(int)
+        if self.fix_samples == 0:  # 随机采样点数
+            num_samples = np.random.randint(self.num_samples_low, self.num_samples_high)
+        else:  # 固定采样点数
+            num_samples = int(self.fix_samples)
 
-        x_samples=np.random.randint(0, 255, size=num_samples)
-        y_samples=np.random.randint(0, 255, size=num_samples)
-        image_samples[x_samples,y_samples]= image_gain[x_samples,y_samples,0]
+        # 生成随机采样点
+        x_samples = np.random.randint(0, self.height, size=num_samples)
+        y_samples = np.random.randint(0, self.width, size=num_samples)
+
+        # 填充增益值
+        image_samples[x_samples, y_samples] = image_gain[x_samples, y_samples, 0]
 
         return image_samples
 
-    def get_cars_map(self,index):
-        # 计算地图索引
-        idxr=np.floor(index/self.simuSetDict["numTx"]).astype(int)               # 地图索引                           # 发射器索引
-        dataset_map_ind=self.maps_inds[idxr+self.ind1]+1        # 实际地图编号（+1因为文件从1开始）
-        map_name = str(dataset_map_ind) + ".png"
-        img_name_cars = os.path.join(self.dir_cars, map_name)
-        image_cars = np.asarray(io.imread(img_name_cars)) / 256
-
-        return image_cars
-
-
-
+    def _load_cars_map(self, map_name):
+        """加载车辆地图"""
+        img_path = os.path.join(self.dir_cars, map_name)
+        return io.imread(img_path) / 256.0
 
     def __len__(self):
-        return (self.ind2-self.ind1+1)*self.simuSetDict["numTx"]
+        return (self.ind2 - self.ind1 + 1) * self.numTx
 
     def __getitem__(self, idx):
-        # 计算地图索引和发射器索引
-        image_gain = self.get_image_gain(self, idx)
-        input_samples = self.get_input_samples(image_gain)
-        image_Tx = self.get_image_Tx(idx)
-        image_buildings = self.get_image_buildings(idx)
-        if self.simuSetDict["carsInput"] =="no":
-            inputs = np.stack([image_buildings, image_Tx, input_samples], axis=2)
-        else:
-            image_cars = self.get_cars_map(idx)
-            inputs = np.stack([image_buildings, image_Tx, input_samples, image_cars], axis=2)
+        """获取单个样本"""
+        # 获取地图和发射器信息
+        map_idx, source_idx = self._get_map_and_source_index(idx)
+        map_name = f"{map_idx}.png"
+        source_name = f"{map_idx}_{source_idx}.png"
+
+        # 加载主要数据
+        image_gain = self._load_gain_map(source_name)
+        image_buildings = self._load_buildings_map(map_name)
+        image_Tx = self._load_transmitter_map(source_name)
+        input_samples = self._create_input_samples(image_gain)
+
+        # 构建输入张量
+        input_layers = [image_buildings, image_Tx, input_samples]
+
+        # 添加车辆通道（如果需要）
+        if self.carsInput != "no":
+            image_cars = self._load_cars_map(map_name)
+            input_layers.append(image_cars)
+
+        inputs = np.stack(input_layers, axis=2)
+
+        # 应用数据转换
         if self.transform:
             inputs = self.transform(inputs).type(torch.float32)
             image_gain = self.transform(image_gain).type(torch.float32)
 
-        return [inputs, image_gain]
+        return inputs, image_gain
 
-    # self.numTx = simuSetDict['numTx']#信源数量
-    # self.thresh = simuSetDict['thresh']# 环境噪声阈值
-    # self.simulation = simuSetDict['simulation']# 仿真方式
-    # self.carsSimul = simuSetDict['carsSimul']# 是否包含车辆
-    # self.carsInput = simuSetDict['carsInput']# 输出是否使用 车辆位置作为模型输入
-    # self.cityMap=simuSetDict["cityMap"]
-    # self.missing=simuSetDict["missing"]
-    #
-    # self.data_samples = simuSetDict["data_samples"]
-    # self.fix_samples = fix_samples
-    # self.num_samples_low = num_samples_low
-    # self.num_samples_high = num_samples_high
-    
+
+
     

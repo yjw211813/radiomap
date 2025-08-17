@@ -16,36 +16,16 @@ os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #from lib import RadioUNet_modules3, RadioUNet_loaders2
-from data.lib.loaders import RadioUNet_c_sprseIRT4
+from data.lib.loaders import RadioUNet_c_sprseIRT4,RadioMapSeerLoader
 
 
 if __name__ == '__main__':
-    Radio_train = RadioUNet_c_sprseIRT4(phase="train",simulation="IRT2")
-    Radio_val = RadioUNet_c_sprseIRT4(phase="val",simulation="IRT2")
-    Radio_test = RadioUNet_c_sprseIRT4(phase="test",simulation="IRT2")
 
-    image_datasets = {
-        'train': Radio_train, 'val': Radio_val
-    }
-
-    batch_size = 15
-
-    dataloaders = {
-        'train': DataLoader(Radio_train, batch_size=batch_size, shuffle=True, num_workers=1),
-        'val': DataLoader(Radio_val, batch_size=batch_size, shuffle=True, num_workers=1)
-    }
-
-    i=800
-    image_build_ant, image_gain,image_sample = Radio_train[i]
-    image_sample = image_sample * image_gain
-
-    # 创建掩码：标记image_build_ant[2]中非零像素的位置
-    mask = image_build_ant[2] != 0
-
-    # 在掩码位置叠加image_gain[0]的值 (增强效果)
-    # 注意：这里直接加到原始image_gain[0]上，会修改原始数据
-    # 如需保留原始数据，应先复制: modified_gain = image_gain[0].copy()
-    image_gain[0][mask] += image_gain[0][mask]  # 翻倍增强
+    Radio_train = RadioUNet_c_sprseIRT4(phase="train",simulation="IRT4",cityMap="complete" )
+    i=400
+    inputs, image_gain, image_samples = Radio_train[i]
+    mask = inputs[2] != 0
+    image_gain[0][mask] += image_gain[0][mask]
     # 显示结果
     plt.figure(figsize=(15, 10))
 
@@ -54,23 +34,47 @@ if __name__ == '__main__':
     plt.title('Modified Gain[0]')
 
     plt.subplot(232)
-    plt.imshow(image_sample[0], cmap='jet')
+    plt.imshow(inputs[0])
     plt.title('Sample[0]')
 
     plt.subplot(233)
-    plt.imshow(image_build_ant[0])
+    plt.imshow(inputs[2])
     plt.title('Build_ant[0]')
 
+
+    simuSetDict = {
+        "ind1": 0,                                                           # 起始索引
+        "ind2": 0,                                                           # 末尾索引
+        "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/", # 数据集文件夹
+        "numTx": 80,                                                         # 信源数量设定
+        "thresh": 0.05,                                                      # 环境噪声
+        "simulation": "IRT4",                      # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+        "carsSimul": "yes",                        # 是否开启小车作为仿真
+        "carsInput": "yes",                        # 是否将小车图作为模型输入
+        "IRT2maxW": 1,                            # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+        "cityMap": "complete",                    # 是否输入完全的城市地图
+        "missing": 1,                             # 地图缺失号码
+        "fix_samples": 300,                         # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+        "num_samples_low": 10,                    # 最低采样数
+        "num_samples_high": 300                   # 最高采样数
+    }
+
+    My_Radio_train = RadioMapSeerLoader(simuSetDict,phase="train")
+
+    inputs, image_gain = My_Radio_train[i]
+    mask = inputs[3] != 0
+    image_gain[0][mask] += image_gain[0][mask]
+
     plt.subplot(234)
-    plt.imshow(image_build_ant[1])
+    plt.imshow(image_gain[0], cmap='jet')
     plt.title('Build_ant[1]')
 
     plt.subplot(235)
-    plt.imshow(image_build_ant[2])
+    plt.imshow(inputs[0])
     plt.title('Build_ant[2] (Mask Source)')
 
     plt.subplot(236)
-    plt.imshow(mask)  # 显示掩码区域
+    plt.imshow(inputs[3])  # 显示掩码区域
     plt.title('Mask Region')
 
     plt.tight_layout()
