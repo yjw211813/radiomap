@@ -16,16 +16,36 @@ os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #from lib import RadioUNet_modules3, RadioUNet_loaders2
-from data.lib.loaders import RadioUNet_c_sprseIRT4,RadioMapSeerLoader
+from data.lib.loaders import RadioMapSeerLoader
 
 
 if __name__ == '__main__':
 
-    Radio_train = RadioUNet_c_sprseIRT4(phase="train",simulation="IRT4",cityMap="complete" )
-    i=400
-    inputs, image_gain, image_samples = Radio_train[i]
-    mask = inputs[2] != 0
+    simuSetDict = {
+        "ind1": 0,                                                           # 起始索引
+        "ind2": 0,                                                           # 末尾索引
+        "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/", # 数据集文件夹
+        "numTx": 80,                                                         # 信源数量设定
+        "thresh": 0.05,                                                      # 环境噪声
+        "simulation": "IRT2",                      # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+        "carsSimul": "yes",                        # 是否开启小车作为仿真
+        "carsInput": "yes",                        # 是否将小车图作为模型输入
+        "IRT2maxW": 1,                            # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+        "cityMap": "complete",                    # 是否输入完全的城市地图
+        "missing": 1,                             # 地图缺失号码
+        "fix_samples": 300,                         # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+        "num_samples_low": 10,                    # 最低采样数
+        "num_samples_high": 300                   # 最高采样数
+    }
+
+    My_Radio_train = RadioMapSeerLoader(simuSetDict,phase="train")
+    i = 400
+    inputs, image_gain = My_Radio_train[i]
+    mask = inputs[3] != 0
     image_gain[0][mask] += image_gain[0][mask]
+
+
+
     # 显示结果
     plt.figure(figsize=(15, 10))
 
@@ -38,43 +58,19 @@ if __name__ == '__main__':
     plt.title('Sample[0]')
 
     plt.subplot(233)
-    plt.imshow(inputs[2])
+    plt.imshow(inputs[1])
     plt.title('Build_ant[0]')
 
-
-    simuSetDict = {
-        "ind1": 0,                                                           # 起始索引
-        "ind2": 0,                                                           # 末尾索引
-        "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/", # 数据集文件夹
-        "numTx": 80,                                                         # 信源数量设定
-        "thresh": 0.05,                                                      # 环境噪声
-        "simulation": "IRT4",                      # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
-        "carsSimul": "yes",                        # 是否开启小车作为仿真
-        "carsInput": "yes",                        # 是否将小车图作为模型输入
-        "IRT2maxW": 1,                            # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
-        "cityMap": "complete",                    # 是否输入完全的城市地图
-        "missing": 1,                             # 地图缺失号码
-        "fix_samples": 300,                         # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
-        "num_samples_low": 10,                    # 最低采样数
-        "num_samples_high": 300                   # 最高采样数
-    }
-
-    My_Radio_train = RadioMapSeerLoader(simuSetDict,phase="train")
-
-    inputs, image_gain = My_Radio_train[i]
-    mask = inputs[3] != 0
-    image_gain[0][mask] += image_gain[0][mask]
-
     plt.subplot(234)
-    plt.imshow(image_gain[0], cmap='jet')
+    plt.imshow(inputs[2], cmap='jet')
     plt.title('Build_ant[1]')
 
     plt.subplot(235)
-    plt.imshow(inputs[0])
+    plt.imshow(inputs[3], cmap='jet')
     plt.title('Build_ant[2] (Mask Source)')
 
     plt.subplot(236)
-    plt.imshow(inputs[3])  # 显示掩码区域
+    plt.imshow(inputs[4])  # 显示掩码区域
     plt.title('Mask Region')
 
     plt.tight_layout()

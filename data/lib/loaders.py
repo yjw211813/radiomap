@@ -6,6 +6,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils, datasets, models
 import warnings
+from scipy.spatial import cKDTree
 warnings.filterwarnings("ignore")
 
 
@@ -158,6 +159,57 @@ class RadioMapSeerLoader(Dataset):
 
         return image_samples
 
+    def idw_interpolate_sample(self,img_sample, k=5, power=2):
+        """
+           NumPy版本的反距离加权插值
+           :param matrix: 输入数组，形状(H, W)
+           :param k: 使用的最近邻点数量
+           :param power: 距离权重指数
+           :return: 插值后的数组，形状与输入相同
+           """
+        # 创建输入数据的副本，避免修改原始数据
+        data = np.copy(img_sample)
+        height, width = data.shape
+
+        # 获取所有非零点的坐标和值
+        non_zero_mask = data != 0
+        non_zero_coords = np.argwhere(non_zero_mask)
+        non_zero_values = data[non_zero_mask]
+
+        # 如果没有非零点，直接返回副本
+        if len(non_zero_coords) == 0:
+            return data
+
+        # 构建KDTree加速最近邻搜索
+        tree = cKDTree(non_zero_coords)
+
+        # 获取所有零值点坐标
+        zero_coords = np.argwhere(data == 0)
+
+        # 批量查询所有零值点的k个最近邻
+        if len(zero_coords) > 0:  # 确保有需要插值的点
+            distances, indices = tree.query(zero_coords, k=k)
+
+            # 避免除以零错误
+            distances = np.maximum(distances, 1e-12)
+
+            # 计算权重 (1/d^power)
+            weights = 1 / (distances ** power)
+
+            # 获取对应的非零值
+            neighbor_values = non_zero_values[indices]
+
+            # 计算加权平均值
+            weighted_sum = np.sum(weights * neighbor_values, axis=1)
+            sum_weights = np.sum(weights, axis=1)
+            interpolated_values = weighted_sum / sum_weights
+
+            # 更新零值点
+            for (y, x), value in zip(zero_coords, interpolated_values):
+                data[y, x] = value
+
+        return data
+
     def _load_cars_map(self, map_name):
         """加载车辆地图"""
         img_path = os.path.join(self.dir_cars, map_name)
@@ -178,9 +230,9 @@ class RadioMapSeerLoader(Dataset):
         image_buildings = self._load_buildings_map(map_name)
         image_Tx = self._load_transmitter_map(source_name)
         input_samples = self._create_input_samples(image_gain)
-
+        interpolate_data = self.idw_interpolate_sample(input_samples, k=5)
         # 构建输入张量
-        input_layers = [image_buildings, image_Tx, input_samples]
+        input_layers = [image_buildings, image_Tx, input_samples,interpolate_data]
 
         # 添加车辆通道（如果需要）
         if self.carsInput != "no":
