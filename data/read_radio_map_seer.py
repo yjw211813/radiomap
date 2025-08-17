@@ -20,9 +20,9 @@ from data.lib.loaders import RadioUNet_c_sprseIRT4
 
 
 if __name__ == '__main__':
-    Radio_train = RadioUNet_c_sprseIRT4(phase="train")
-    Radio_val = RadioUNet_c_sprseIRT4(phase="val")
-    Radio_test = RadioUNet_c_sprseIRT4(phase="test")
+    Radio_train = RadioUNet_c_sprseIRT4(phase="train",simulation="IRT2")
+    Radio_val = RadioUNet_c_sprseIRT4(phase="val",simulation="IRT2")
+    Radio_test = RadioUNet_c_sprseIRT4(phase="test",simulation="IRT2")
 
     image_datasets = {
         'train': Radio_train, 'val': Radio_val
