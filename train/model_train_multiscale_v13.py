@@ -28,6 +28,11 @@ model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_sca
 model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"
 device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
+
+
+
+
+
 def evaluate(model, val_loader, device, writer, epoch):
     model.eval()  # Set model to evaluation mode
     total_samples = 0
@@ -165,6 +170,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
 if __name__ == '__main__':
     print("训练13 使用学习率调度器")
+
     Radio_train = RadioUNet_c_sprseIRT4(phase="train", carsSimul="yes", carsInput="yes")
     Radio_val = RadioUNet_c_sprseIRT4(phase="val", carsSimul="yes", carsInput="yes")
     Radio_test = RadioUNet_c_sprseIRT4(phase="test", carsSimul="yes", carsInput="yes")

@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 import os
 import shutil
-from data.lib.loaders import RadioUNet_c_sprseIRT4
+from data.lib.loaders import RadioMapSeerLoader
 
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
@@ -21,6 +21,23 @@ C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
 log_dir = r'../runs/model_log/BTM_ghost_net'
 model_save_dir = "../runs/model_pth/BTM_ghost_net/"
+
+simuSetDict = {
+    "ind1": 0,  # 起始索引
+    "ind2": 0,  # 末尾索引
+    "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
+    "numTx": 80,  # 信源数量设定
+    "thresh": 0.05,  # 环境噪声
+    "simulation": "IRT2",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+    "carsSimul": "yes",  # 是否开启小车作为仿真
+    "carsInput": "yes",  # 是否将小车图作为模型输入
+    "IRT2maxW": 1,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+    "cityMap": "complete",  # 是否输入完全的城市地图
+    "missing": 1,  # 地图缺失号码
+    "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+    "num_samples_low": 10,  # 最低采样数
+    "num_samples_high": 300  # 最高采样数
+}
 
 class NMSE(nn.Module):
     def __init__(self):
@@ -130,9 +147,9 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
 if __name__ == '__main__':
 
-    Radio_train = RadioUNet_c_sprseIRT4(phase="train", carsSimul="yes", carsInput="yes")
-    Radio_val = RadioUNet_c_sprseIRT4(phase="val", carsSimul="yes", carsInput="yes")
-    Radio_test = RadioUNet_c_sprseIRT4(phase="test", carsSimul="yes", carsInput="yes")
+    Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
+    Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
+    Radio_test = RadioMapSeerLoader(simuSetDict, phase="test")
     image_datasets = {
         'train': Radio_train, 'val': Radio_val
     }
