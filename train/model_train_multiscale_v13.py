@@ -23,14 +23,75 @@ BTM_ghost_UNet_output_shape = [1, 256, 256]
 C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v9_ssim'
-model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"
-model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"
+log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v9_ssim' # log 存储位置
+model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"# 模型加载目录
+model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"# 模型存储位置
 device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
+simuSetDict = {
+    "ind1": 0,  # 起始索引
+    "ind2": 0,  # 末尾索引
+    "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
+    "numTx": 80,  # 信源数量设定
+    "thresh": 0.05,  # 环境噪声
+    "simulation": "IRT2",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+    "carsSimul": "yes",  # 是否开启小车作为仿真
+    "carsInput": "yes",  # 是否将小车图作为模型输入
+    "IRT2maxW": 1,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+    "cityMap": "complete",  # 是否输入完全的城市地图
+    "missing": 1,  # 地图缺失号码
+    "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+    "num_samples_low": 10,  # 最低采样数
+    "num_samples_high": 300  # 最高采样数
+}
 
+def batch_sample_images_torch(input_tensor, samples_per_image=4, fix_samples=0,
+                              num_samples_low=100, num_samples_high=200):
+    """
+    PyTorch优化的批量图像采样函数
 
+    参数:
+    input_tensor: 输入张量，形状为(B, C, H, W)
+    samples_per_image: 每张图像的采样次数 (默认4)
+    fix_samples: 固定采样点数 (0表示随机)
+    num_samples_low: 随机采样点数下限 (默认100)
+    num_samples_high: 随机采样点数上限 (默认200)
 
+    返回:
+    output: 采样后的张量，形状为(B*samples_per_image, C, H, W)
+    """
+    device = input_tensor.device
+    B, C, H, W = input_tensor.shape
+    total_samples = B * samples_per_image
+
+    # 预计算所有样本的采样点数
+    if fix_samples == 0:
+        num_samples_arr = torch.randint(num_samples_low, num_samples_high,
+                                        (total_samples,), device=device)
+    else:
+        num_samples_arr = torch.full((total_samples,), fix_samples,
+                                     device=device, dtype=torch.int32)
+
+    # 创建输出张量
+    output = torch.zeros((total_samples, C, H, W), device=device)
+
+    # 处理每个输出样本
+    for idx in range(total_samples):
+        # 确定对应的原始图像
+        b = idx // samples_per_image
+        img = input_tensor[b, 0]  # (H, W)
+
+        # 获取当前样本的采样点数
+        num_samples = num_samples_arr[idx].item()
+
+        # 生成随机采样点坐标
+        x_samples = torch.randint(0, H, (num_samples,), device=device)
+        y_samples = torch.randint(0, W, (num_samples,), device=device)
+
+        # 使用高级索引直接赋值
+        output[idx, 0, x_samples, y_samples] = img[x_samples, y_samples]
+
+    return output
 
 
 def evaluate(model, val_loader, device, writer, epoch):
@@ -138,11 +199,14 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
             samples = samples * targets
 
             inputs = torch.cat((inputs, samples), 1)
+            # 这里需要设置一下模型当前的运行模式
 
             # Forward pass
             outputs = model(inputs)
             # Calculate loss
             # loss = fourier_loss(outputs, targets, epoch)
+
+            # 这里需要设置一下loss的计算模式
             loss = criterion(outputs, targets)
 
             running_loss += loss.item()/inputs.shape[0]
@@ -170,7 +234,6 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
 if __name__ == '__main__':
     print("训练13 使用学习率调度器")
-
     Radio_train = RadioUNet_c_sprseIRT4(phase="train", carsSimul="yes", carsInput="yes")
     Radio_val = RadioUNet_c_sprseIRT4(phase="val", carsSimul="yes", carsInput="yes")
     Radio_test = RadioUNet_c_sprseIRT4(phase="test", carsSimul="yes", carsInput="yes")
@@ -185,7 +248,7 @@ if __name__ == '__main__':
 
 
     net = BTM_multi_scale_v6(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
-    net.load_weights(os.path.join(model_load_dir, f"checkpoint_epoch_600.pth"))
+    # net.load_weights(os.path.join(model_load_dir, f"checkpoint_epoch_600.pth"))
     train_loader = dataloaders['train']
     val_loader = dataloaders['val']
 

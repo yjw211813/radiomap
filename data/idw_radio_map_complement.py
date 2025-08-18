@@ -80,80 +80,144 @@ def idw_interpolation_tensor(matrix, k=5, power=2):
     return result
 
 
+import numpy as np
+
+import torch
+
+
+def batch_sample_images_torch(input_tensor, samples_per_image=4, fix_samples=0,
+                              num_samples_low=100, num_samples_high=200):
+    """
+    PyTorch优化的批量图像采样函数
+
+    参数:
+    input_tensor: 输入张量，形状为(B, C, H, W)
+    samples_per_image: 每张图像的采样次数 (默认4)
+    fix_samples: 固定采样点数 (0表示随机)
+    num_samples_low: 随机采样点数下限 (默认100)
+    num_samples_high: 随机采样点数上限 (默认200)
+
+    返回:
+    output: 采样后的张量，形状为(B*samples_per_image, C, H, W)
+    """
+    device = input_tensor.device
+    B, C, H, W = input_tensor.shape
+    total_samples = B * samples_per_image
+
+    # 预计算所有样本的采样点数
+    if fix_samples == 0:
+        num_samples_arr = torch.randint(num_samples_low, num_samples_high,
+                                        (total_samples,), device=device)
+    else:
+        num_samples_arr = torch.full((total_samples,), fix_samples,
+                                     device=device, dtype=torch.int32)
+
+    # 创建输出张量
+    output = torch.zeros((total_samples, C, H, W), device=device)
+
+    # 处理每个输出样本
+    for idx in range(total_samples):
+        # 确定对应的原始图像
+        b = idx // samples_per_image
+        img = input_tensor[b, 0]  # (H, W)
+
+        # 获取当前样本的采样点数
+        num_samples = num_samples_arr[idx].item()
+
+        # 生成随机采样点坐标
+        x_samples = torch.randint(0, H, (num_samples,), device=device)
+        y_samples = torch.randint(0, W, (num_samples,), device=device)
+
+        # 使用高级索引直接赋值
+        output[idx, 0, x_samples, y_samples] = img[x_samples, y_samples]
+
+    return output
 
 if __name__ == '__main__':
+    # 创建模拟输入 (9, 1, 256, 256)
+    input_data = torch.rand(9, 1, 256, 256).cuda()
 
-    simuSetDict = {
-        "ind1": 0,                                                           # 起始索引
-        "ind2": 0,                                                           # 末尾索引
-        "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/", # 数据集文件夹
-        "numTx": 80,                                                         # 信源数量设定
-        "thresh": 0.05,                                                      # 环境噪声
-        "simulation": "IRT2",                      # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
-        "carsSimul": "yes",                        # 是否开启小车作为仿真
-        "carsInput": "yes",                        # 是否将小车图作为模型输入
-        "IRT2maxW": 1,                            # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
-        "cityMap": "complete",                    # 是否输入完全的城市地图
-        "missing": 1,                             # 地图缺失号码
-        "fix_samples": 300,                         # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
-        "num_samples_low": 10,                    # 最低采样数
-        "num_samples_high": 300                   # 最高采样数
-    }
+    # 获取采样结果 (36, 1, 256, 256)
+    sampled_data = batch_sample_images_torch(
+        input_data,
+        samples_per_image=4,  # 每张图采样4次
+        fix_samples=150  # 固定150个采样点
+    )
 
-    My_Radio_train = RadioMapSeerLoader(simuSetDict,phase="train")
-
-
-    i=800
-    inputs, image_gain = My_Radio_train[i]
-    mask = inputs[3] != 0
-    image_gain[0][mask] += image_gain[0][mask]
-
-    # 在掩码位置叠加image_gain[0]的值 (增强效果)
-    # 注意：这里直接加到原始image_gain[0]上，会修改原始数据
-    # 如需保留原始数据，应先复制: modified_gain = image_gain[0].copy()
-    image_gain[0][mask] += image_gain[0][mask]  # 翻倍增强
-    image_sample = inputs[2].unsqueeze(0)
-    print("原始矩阵零值点数量:", torch.sum(image_sample == 0.0).item())
-    # 执行IDW插值
-
-    start_time = time.time()
-    interpolated_matrix = idw_interpolation_tensor(image_sample, k=5, power=2)
-
-    end_time = time.time()
-
-    execution_time = end_time - start_time
-    print(f"IDW插值执行时间: {execution_time:.4f} 秒")
-    print("插值后零值点数量:", torch.sum(interpolated_matrix == 0.0).item())
-
-    # 显示结果
-    plt.figure(figsize=(15, 10))
-
-    plt.subplot(231)
-    plt.imshow(image_gain[0], cmap='jet')
-    plt.title('Modified Gain[0]')
-
-    plt.subplot(232)
-    plt.imshow(inputs[0])
-    plt.title('Sample[0]')
-
-    plt.subplot(233)
-    plt.imshow(inputs[1])
-    plt.title('Build_ant[0]')
-
-    plt.subplot(234)
-    plt.imshow(inputs[2], cmap='jet')
-    plt.title('Build_ant[1]')
-
-    plt.subplot(235)
-    plt.imshow(inputs[3])
-    plt.title('Build_ant[2] (Mask Source)')
-
-    plt.subplot(236)
-    plt.imshow(interpolated_matrix[0],cmap='jet')  # 显示掩码区域
-    plt.title('Mask Region')
-
-    plt.tight_layout()
-    plt.show()
+    print("输入形状:", input_data.shape)  # (9, 1, 256, 256)
+    print("输出形状:", sampled_data.shape)  # (36, 1, 256, 256)
+    print(sampled_data.device)
+    # simuSetDict = {
+    #     "ind1": 0,                                                           # 起始索引
+    #     "ind2": 0,                                                           # 末尾索引
+    #     "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/", # 数据集文件夹
+    #     "numTx": 80,                                                         # 信源数量设定
+    #     "thresh": 0.05,                                                      # 环境噪声
+    #     "simulation": "IRT2",                      # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+    #     "carsSimul": "yes",                        # 是否开启小车作为仿真
+    #     "carsInput": "yes",                        # 是否将小车图作为模型输入
+    #     "IRT2maxW": 1,                            # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+    #     "cityMap": "complete",                    # 是否输入完全的城市地图
+    #     "missing": 1,                             # 地图缺失号码
+    #     "fix_samples": 300,                         # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+    #     "num_samples_low": 10,                    # 最低采样数
+    #     "num_samples_high": 300                   # 最高采样数
+    # }
+    #
+    # My_Radio_train = RadioMapSeerLoader(simuSetDict,phase="train")
+    #
+    #
+    # i=800
+    # inputs, image_gain = My_Radio_train[i]
+    # mask = inputs[3] != 0
+    # image_gain[0][mask] += image_gain[0][mask]
+    #
+    # # 在掩码位置叠加image_gain[0]的值 (增强效果)
+    # # 注意：这里直接加到原始image_gain[0]上，会修改原始数据
+    # # 如需保留原始数据，应先复制: modified_gain = image_gain[0].copy()
+    # image_gain[0][mask] += image_gain[0][mask]  # 翻倍增强
+    # image_sample = inputs[2].unsqueeze(0)
+    # print("原始矩阵零值点数量:", torch.sum(image_sample == 0.0).item())
+    # # 执行IDW插值
+    #
+    # start_time = time.time()
+    # interpolated_matrix = idw_interpolation_tensor(image_sample, k=5, power=2)
+    #
+    # end_time = time.time()
+    #
+    # execution_time = end_time - start_time
+    # print(f"IDW插值执行时间: {execution_time:.4f} 秒")
+    # print("插值后零值点数量:", torch.sum(interpolated_matrix == 0.0).item())
+    #
+    # # 显示结果
+    # plt.figure(figsize=(15, 10))
+    #
+    # plt.subplot(231)
+    # plt.imshow(image_gain[0], cmap='jet')
+    # plt.title('Modified Gain[0]')
+    #
+    # plt.subplot(232)
+    # plt.imshow(inputs[0])
+    # plt.title('Sample[0]')
+    #
+    # plt.subplot(233)
+    # plt.imshow(inputs[1])
+    # plt.title('Build_ant[0]')
+    #
+    # plt.subplot(234)
+    # plt.imshow(inputs[2], cmap='jet')
+    # plt.title('Build_ant[1]')
+    #
+    # plt.subplot(235)
+    # plt.imshow(inputs[3])
+    # plt.title('Build_ant[2] (Mask Source)')
+    #
+    # plt.subplot(236)
+    # plt.imshow(interpolated_matrix[0],cmap='jet')  # 显示掩码区域
+    # plt.title('Mask Region')
+    #
+    # plt.tight_layout()
+    # plt.show()
 '''
     nonzero_mask = (image_sample != 0)
 

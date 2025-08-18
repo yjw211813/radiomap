@@ -122,6 +122,9 @@ class Inception_group2D(nn.Module):
         # 拼接所有分支的输出
         outputs = [branch1, branch2, branch3, branch4]
         return torch.cat(outputs, 1)  # 在通道维度上拼接
+    
+
+
 def incetion_group_test():
     input_tensor = torch.randn(2, 4, 128, 128)
     inception_module = Inception_group2D(C_in=4, C_out=4, kernel_sizes=[1, 3, 5, 7], dilated_num=1)
@@ -221,6 +224,7 @@ def multi_scale_block2D_test():
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output_tensor.shape}")
 
+
 class Inception_block2D(nn.Module):
     def __init__(self, C_in, C_out,kernel_sizes,dilated_num,drop_out=0.05):
         super(Inception_block2D, self).__init__()
@@ -293,6 +297,7 @@ def incetion_block_test():
     output_tensor = inception_module(input_tensor)
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output_tensor.shape}")
+
 
 class Res_Inception_ghost2D(nn.Module):
     def __init__(self, C_in, C_out,kernel_sizes,dilated_num,drop_out=0.05):
