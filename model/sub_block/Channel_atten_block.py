@@ -282,7 +282,7 @@ def Ave_Max_CA2D_test():
 
 # 运行测试
 if __name__ == "__main__":
-    SE_Channel_attan2D_test()
-    # SK_Channel_atten2D_test()
+    # SE_Channel_attan2D_test()
+    SK_Channel_atten2D_test()
 
 
