@@ -31,7 +31,7 @@ simuSetDict = {
     "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
     "num_samples_low": 10,  # 最低采样数
     "num_samples_high": 300,  # 最高采样数
-    "inter_flag":False # 看是否需要插值图像
+    "inter_flag":True # 看是否需要插值图像
 }
 
 train_batch_size = 32  # 批次大小
@@ -243,7 +243,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
 
 if __name__ == '__main__':
-    print("训练")
+    print("inter_flag:",simuSetDict["inter_flag"])
 
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
     Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
