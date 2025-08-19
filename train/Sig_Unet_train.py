@@ -47,7 +47,7 @@ attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2
 log_dir = r'/home/code/radio_map_construction/runs/model_log/UNet_SK'# log 存储位置
 model_load_dir = "/home/code/radio_map_construction/runs/model_pth/UNet_SK/"# 模型加载目录
 model_save_dir = "/home/code/radio_map_construction/runs/model_pth/UNet_SK/"# 模型存储位置
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
 
 def batch_sample_images_torch(input_tensor, samples_per_image=4, fix_samples=0,

@@ -252,8 +252,7 @@ docker run --shm-size=16g --gpus all -d --name deep_au_test  deep_au:v1
 
 echo "export PYTHONPATH=\$PYTHONPATH:/home/code/radio_map_construction" >> ~/.bashrc
 source ~/.bashrc
-python3 /home/code/radio_map_construction/train/model_train_multiscale_v8.py
-
+python3  /home/code/radio_map_construction/train/Sig_Unet_train.py
 
 # 出现的问题
 加入傅里叶损失和小波损失
