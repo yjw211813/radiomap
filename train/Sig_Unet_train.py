@@ -244,7 +244,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
 if __name__ == '__main__':
     print("inter_flag:",simuSetDict["inter_flag"])
-    print("修正1")
+    print("SK")
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
     Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
     Radio_test = RadioMapSeerLoader(simuSetDict, phase="test")
