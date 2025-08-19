@@ -44,9 +44,9 @@ BTM_ghost_UNet_output_shape = [1, 256, 256]
 C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-log_dir = r'/home/code/radio_map_construction/runs/model_log/UNet_scale_01'# log 存储位置
-model_load_dir = "/home/code/radio_map_construction/runs/model_pth/UNet_scale_01/"# 模型加载目录
-model_save_dir = "/home/code/radio_map_construction/runs/model_pth/UNet_scale_01/"# 模型存储位置
+log_dir = r'/home/code/radio_map_construction/runs/model_log/UNet_SK'# log 存储位置
+model_load_dir = "/home/code/radio_map_construction/runs/model_pth/UNet_SK/"# 模型加载目录
+model_save_dir = "/home/code/radio_map_construction/runs/model_pth/UNet_SK/"# 模型存储位置
 device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
 
