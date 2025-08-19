@@ -226,6 +226,14 @@ val RMSE: 0.0189
 val SSIM: 0.9507
 val PSNR: 34.3358
 
+v1 到 v2 就是从重排上采样到反卷积上采样
+v2 到 v3 就是将原来的inception变成残差模块，加大了卷积核大小，并且加了空洞
+v3 到 v4 则是去掉其中的空洞喝扩大卷积核 只用残差模块
+v4 到 v6 则是将网络加深 然后还是使用元素重排上采样
+v4 到 multi_v5 将其中残差卷积块换成了多尺度卷积块
+multi_v5 到 multi_v6 则是将中间残差分形卷积换成不是残差的分形卷积
+
+
 
 
 
@@ -269,4 +277,5 @@ python3 /home/code/radio_map_construction/train/model_train_multiscale_v8.py
 
 算法后处理部分可以加一个修正模块进行高频部分的修正
 1、看是否有哪些高频注意力机制可以使用
+
 

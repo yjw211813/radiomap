@@ -1,4 +1,4 @@
-from model.sigle_Unet.BTM_multi_scale_v6 import BTM_multi_scale_v6
+from model.sigle_Unet.Unet_BTM import Unet_BTM
 # from model.metric_fun import NMSE
 import torch.nn as nn
 from torchmetrics.functional import structural_similarity_index_measure as ssim
@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 import os
 import shutil
 import math
-from data.lib.loaders import RadioUNet_c_sprseIRT4
+from data.lib.loaders import RadioMapSeerLoader
 
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
@@ -18,14 +18,14 @@ from torch.utils.tensorboard import SummaryWriter
 
 train_batch_size = 32  # 批次大小
 test_batch_size = 32  # 批次大小
-BTM_ghost_UNet_input_shape = [4, 256, 256]
+BTM_ghost_UNet_input_shape = [5, 256, 256]
 BTM_ghost_UNet_output_shape = [1, 256, 256]
 C_down_list =  [32, 64, 128, 256]
 C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
 attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v9_ssim' # log 存储位置
-model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"# 模型加载目录
-model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v9_ssim/"# 模型存储位置
+log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v6'# log 存储位置
+model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v6/"# 模型加载目录
+model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v6/"# 模型存储位置
 device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
 simuSetDict = {
@@ -34,10 +34,10 @@ simuSetDict = {
     "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
     "numTx": 80,  # 信源数量设定
     "thresh": 0.05,  # 环境噪声
-    "simulation": "IRT2",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+    "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
     "carsSimul": "yes",  # 是否开启小车作为仿真
     "carsInput": "yes",  # 是否将小车图作为模型输入
-    "IRT2maxW": 1,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+    "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
     "cityMap": "complete",  # 是否输入完全的城市地图
     "missing": 1,  # 地图缺失号码
     "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
@@ -103,12 +103,9 @@ def evaluate(model, val_loader, device, writer, epoch):
     total_psnr = 0.0
 
     with torch.no_grad():
-        for inputs, targets, samples in val_loader:
+        for inputs, targets in val_loader:
             inputs = inputs.to(device)
             targets = targets.to(device)
-            samples = samples.to(device)
-            samples = samples * targets
-            inputs = torch.cat((inputs, samples), 1)
 
             # Forward pass
             outputs = model(inputs)
@@ -178,7 +175,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
     scheduler = DynamicLRScheduler(
         optimizer,
         lr_min=1e-6,  # 最小学习率
-        lr_max=5e-4,  # 最大学习率
+        lr_max=1e-3,  # 最大学习率
         warmup_epochs=warmup_epochs,  # 前warmup_epochs个epoch学习率上升
         decay_epochs=num_epochs - warmup_epochs  # 后面epoch学习率下降
     )
@@ -192,13 +189,10 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
     for epoch in range(num_epochs):
         model.train()  # Set model to training mode
         running_loss = 0.0
-        for inputs, targets, samples in train_loader:
+        for inputs, targets in train_loader:
             inputs = inputs.to(device)
             targets = targets.to(device)
-            samples = samples.to(device)
-            samples = samples * targets
 
-            inputs = torch.cat((inputs, samples), 1)
             # 这里需要设置一下模型当前的运行模式
 
             # Forward pass
@@ -233,13 +227,12 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
 
 if __name__ == '__main__':
-    print("训练13 使用学习率调度器")
-    Radio_train = RadioUNet_c_sprseIRT4(phase="train", carsSimul="yes", carsInput="yes")
-    Radio_val = RadioUNet_c_sprseIRT4(phase="val", carsSimul="yes", carsInput="yes")
-    Radio_test = RadioUNet_c_sprseIRT4(phase="test", carsSimul="yes", carsInput="yes")
-    image_datasets = {
-        'train': Radio_train, 'val': Radio_val
-    }
+    print("训练")
+
+    Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
+    Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
+    Radio_test = RadioMapSeerLoader(simuSetDict, phase="test")
+
     dataloaders = {
         'train': DataLoader(Radio_train, batch_size=train_batch_size, shuffle=True, num_workers=4),
         'val': DataLoader(Radio_val, batch_size=test_batch_size, shuffle=True, num_workers=4)
@@ -247,7 +240,7 @@ if __name__ == '__main__':
     # 设置设备为GPU
 
 
-    net = BTM_multi_scale_v6(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
+    net = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
     # net.load_weights(os.path.join(model_load_dir, f"checkpoint_epoch_600.pth"))
     train_loader = dataloaders['train']
     val_loader = dataloaders['val']

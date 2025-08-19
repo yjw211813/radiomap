@@ -1,5 +1,7 @@
 from __future__ import print_function, division
 import os
+from csv import excel
+
 import torch
 from skimage import io, transform
 import numpy as np
@@ -197,7 +199,9 @@ class RadioMapSeerLoader(Dataset):
             weights = 1 / (distances ** power)
 
             # 获取对应的非零值
+
             neighbor_values = non_zero_values[indices]
+
 
             # 计算加权平均值
             weighted_sum = np.sum(weights * neighbor_values, axis=1)
@@ -230,7 +234,10 @@ class RadioMapSeerLoader(Dataset):
         image_buildings = self._load_buildings_map(map_name)
         image_Tx = self._load_transmitter_map(source_name)
         input_samples = self.create_input_samples(image_gain)
-        interpolate_data = self.idw_interpolate_sample(input_samples, k=5)
+        try:
+            interpolate_data = self.idw_interpolate_sample(input_samples, k=5)
+        except:
+            print(1)
         # 构建输入张量
         input_layers = [image_buildings, image_Tx, input_samples,interpolate_data]
 

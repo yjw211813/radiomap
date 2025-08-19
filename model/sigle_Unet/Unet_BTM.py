@@ -12,9 +12,9 @@ class Swish(nn.Module):
 # 变换到相同形状进行加和形式
 
 
-class BTM_Net_v4(nn.Module):
+class BTM_Net_multi_scale(nn.Module):
     def __init__(self,input_shape, output_shape,C_list):
-        super(BTM_Net_v4, self).__init__()
+        super(BTM_Net_multi_scale, self).__init__()
         self.input_channel , self.input_H , self.input_W = input_shape
         self.output_channel , self.output_H , self.output_W = output_shape
 
@@ -35,10 +35,10 @@ class BTM_Net_v4(nn.Module):
         return out_map
 
 
-class BTM_multi_scale_v6(nn.Module):
+class Unet_BTM(nn.Module):
     # 修改上卷积方法
     def __init__(self, input_shape, output_shape, C_down_list,attn_params):
-        super(BTM_multi_scale_v6, self).__init__()
+        super(Unet_BTM, self).__init__()
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
         kernel_sizes = [3, 5, 7, 9]
@@ -76,7 +76,7 @@ class BTM_multi_scale_v6(nn.Module):
         attn_factors = [8, 4, 2, 1]  # 空间尺寸缩小因子
         self.repeat_factors = [4,4,4,2]
         for ch, factor, param in zip(attn_channels, attn_factors, attn_params):
-            self.attentions.append(BTM_Net_v4(
+            self.attentions.append(BTM_Net_multi_scale(
                 input_shape,
                 [ch, self.input_H // factor, self.input_W // factor],
                 param
@@ -126,7 +126,7 @@ class BTM_multi_scale_v6(nn.Module):
         print(f"Loaded weights from {checkpoint_path}")
 
 
-def BTM_multi_scale_v6_test():
+def Unet_BTM_test():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)
     batch_size = 8
@@ -140,13 +140,13 @@ def BTM_multi_scale_v6_test():
     C_down_list = [64, 128, 256, 512]
     C_list_attn = torch.tensor([64, 64, 128, 128, 128])
     attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-    net = BTM_multi_scale_v6(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
+    net = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
     output = net(input_data)
     print(f"Output shape: {output.shape}")
 
 
 if __name__ == '__main__':
-    BTM_multi_scale_v6_test()
+    Unet_BTM_test()
     # BTM_ghost_UNet_test()
 
 

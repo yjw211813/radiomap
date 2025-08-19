@@ -6,7 +6,7 @@ import numpy as np
 from torchmetrics.functional import structural_similarity_index_measure as ssim
 from torchmetrics.functional import peak_signal_noise_ratio as psnr
 
-from model.sigle_Unet.BTM_multi_scale_v6 import BTM_multi_scale_v6
+from model.sigle_Unet.Unet_BTM import BTM_multi_scale_v6
 from data.lib.loaders import RadioUNet_c_sprseIRT4
 from torch.utils.data import DataLoader
 import shutil
