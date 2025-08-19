@@ -234,12 +234,12 @@ class RadioMapSeerLoader(Dataset):
         image_buildings = self._load_buildings_map(map_name)
         image_Tx = self._load_transmitter_map(source_name)
         input_samples = self.create_input_samples(image_gain)
-        try:
+
+        if self.inter_flag == True:
             interpolate_data = self.idw_interpolate_sample(input_samples, k=5)
-        except:
-            print(1)
-        # 构建输入张量
-        input_layers = [image_buildings, image_Tx, input_samples,interpolate_data]
+            input_layers = [image_buildings, image_Tx, input_samples, interpolate_data]
+        else:
+            input_layers = [image_buildings, image_Tx, input_samples]
 
         # 添加车辆通道（如果需要）
         if self.carsInput != "no":

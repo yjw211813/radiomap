@@ -14,19 +14,7 @@ from data.lib.loaders import RadioMapSeerLoader
 
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-
-
-train_batch_size = 32  # 批次大小
-test_batch_size = 32  # 批次大小
-BTM_ghost_UNet_input_shape = [5, 256, 256]
-BTM_ghost_UNet_output_shape = [1, 256, 256]
-C_down_list =  [32, 64, 128, 256]
-C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
-attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v6'# log 存储位置
-model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v6/"# 模型加载目录
-model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v6/"# 模型存储位置
-device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+from tqdm import tqdm
 
 simuSetDict = {
     "ind1": 0,  # 起始索引
@@ -42,8 +30,25 @@ simuSetDict = {
     "missing": 1,  # 地图缺失号码
     "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
     "num_samples_low": 10,  # 最低采样数
-    "num_samples_high": 300  # 最高采样数
+    "num_samples_high": 300,  # 最高采样数
+    "inter_flag":False # 看是否需要插值图像
 }
+
+train_batch_size = 32  # 批次大小
+test_batch_size = 32  # 批次大小
+if simuSetDict["inter_flag"] == True:
+    BTM_ghost_UNet_input_shape = [5, 256, 256]
+else:
+    BTM_ghost_UNet_input_shape = [4, 256, 256]
+BTM_ghost_UNet_output_shape = [1, 256, 256]
+C_down_list =  [32, 64, 128, 256]
+C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
+attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
+log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_multi_scale_v6'# log 存储位置
+model_load_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v6/"# 模型加载目录
+model_save_dir = "/home/code/radio_map_construction/runs/model_pth/BTM_multi_scale_v6/"# 模型存储位置
+device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+
 
 def batch_sample_images_torch(input_tensor, samples_per_image=4, fix_samples=0,
                               num_samples_low=100, num_samples_high=200):
@@ -182,14 +187,21 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
 
     # 初始化动态损失
     criterion = torch.nn.MSELoss()
-
-
     model.to(device)
 
     for epoch in range(num_epochs):
         model.train()  # Set model to training mode
         running_loss = 0.0
-        for inputs, targets in train_loader:
+
+        # 创建tqdm进度条
+        train_loader_with_progress = tqdm(
+            train_loader,
+            desc=f'Epoch {epoch+1}/{num_epochs}',  # 进度条前缀
+            leave=True,  # 进度条完成后保留显示
+            dynamic_ncols=True  # 自动调整宽度
+        )
+
+        for inputs, targets in train_loader_with_progress:
             inputs = inputs.to(device)
             targets = targets.to(device)
 
@@ -198,12 +210,16 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
             # Forward pass
             outputs = model(inputs)
             # Calculate loss
-            # loss = fourier_loss(outputs, targets, epoch)
-
-            # 这里需要设置一下loss的计算模式
             loss = criterion(outputs, targets)
 
             running_loss += loss.item()/inputs.shape[0]
+
+            # 更新进度条的显示信息
+            train_loader_with_progress.set_postfix(
+                loss=f'{loss.item()/inputs.shape[0]:.4f}',  # 当前批次的损失
+                avg_loss=f'{running_loss / (train_loader_with_progress.n+1):.4f}'  # 当前平均损失
+            )
+
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
