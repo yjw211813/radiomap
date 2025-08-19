@@ -122,25 +122,25 @@ class RadioMapSeerLoader(Dataset):
             image_gain[mask] = self.thresh
             image_gain = (image_gain - self.thresh) / (1 - self.thresh)
 
-        return image_gain * 256  # 统一缩放
+        return image_gain
 
     def _load_buildings_map(self, map_name):
         """加载建筑物地图"""
         if self.cityMap == "complete":
             img_path = os.path.join(self.dir_buildings, map_name)
-            return io.imread(img_path)
+            return io.imread(img_path) /256
 
         # 处理缺失建筑物的情况
         missing_val = np.random.randint(1, 5) if self.cityMap == "rand" else self.missing
         version = np.random.randint(1, 7)
         dir_path = os.path.join(self.dir_buildings+str(missing_val), str(version))
         img_path = os.path.join(dir_path, map_name)
-        return io.imread(img_path)
+        return io.imread(img_path) /256
 
     def _load_transmitter_map(self, source_name):
         """加载发射器位置图"""
         img_path = os.path.join(self.dir_Tx, source_name)
-        return io.imread(img_path)
+        return io.imread(img_path) /256
 
     def create_input_samples(self, image_gain):
         """创建输入采样点图"""
@@ -217,7 +217,7 @@ class RadioMapSeerLoader(Dataset):
     def _load_cars_map(self, map_name):
         """加载车辆地图"""
         img_path = os.path.join(self.dir_cars, map_name)
-        return io.imread(img_path) 
+        return io.imread(img_path) /256
 
     def __len__(self):
         return (self.ind2 - self.ind1 + 1) * self.numTx
