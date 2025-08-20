@@ -8,7 +8,7 @@ import torch  # 确保导入torch
 simuSetDict = {
     "ind1": 0,  # 起始索引
     "ind2": 0,  # 末尾索引
-    "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
+    "dir_dataset": r"C:\Users\Administrator\Desktop\bin\pystft\RadioMapSeer/",  # 数据集文件夹
     "numTx": 80,  # 信源数量设定
     "thresh": 0.05,  # 环境噪声
     "simulation": "rand",  # 模拟类型
@@ -19,10 +19,11 @@ simuSetDict = {
     "missing": 1,  # 地图缺失号码
     "fix_samples": 300,  # 采样数量
     "num_samples_low": 10,  # 最低采样数
-    "num_samples_high": 300  # 最高采样数
+    "num_samples_high": 300,  # 最高采样数
+    "inter_flag": True  # 看是否需要插值图像
 }
 
-def save_datasets_to_hdf5(simuSetDict, hdf5_path, train_batch_size=64, test_batch_size=64, num_workers=4):
+def save_datasets_to_hdf5(simuSetDict, hdf5_path, train_batch_size=64, test_batch_size=64, num_workers=12):
     datasets = {
         'train': RadioMapSeerLoader(simuSetDict, phase="train"),
         'val': RadioMapSeerLoader(simuSetDict, phase="val"),
@@ -102,8 +103,8 @@ def save_datasets_to_hdf5(simuSetDict, hdf5_path, train_batch_size=64, test_batc
 if __name__ == "__main__":
     save_datasets_to_hdf5(
         simuSetDict,
-        hdf5_path="/home/data/path_loss_data/radiomap_data.h5",
+        hdf5_path=r"C:\Users\Administrator\Desktop\bin\pystft/radiomap_data.h5",
         train_batch_size=64,
         test_batch_size=64,
-        num_workers=8
+        num_workers=12
     )
