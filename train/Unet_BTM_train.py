@@ -16,6 +16,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+
 simuSetDict = {
     "ind1": 0,  # 起始索引
     "ind2": 0,  # 末尾索引
@@ -36,6 +37,8 @@ simuSetDict = {
 
 train_batch_size = 32  # 批次大小
 test_batch_size = 32  # 批次大小
+warmup_epochs = 2
+totally_epochs = 80
 if simuSetDict["inter_flag"] == True:
     BTM_ghost_UNet_input_shape = [5, 256, 256]
 else:
@@ -47,57 +50,8 @@ attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2
 log_dir = r'/home/code/radio_map_construction/runs/model_log/UNet_SK'# log 存储位置
 model_load_dir = "/home/code/radio_map_construction/runs/model_pth/UNet_SK/"# 模型加载目录
 model_save_dir = "/home/code/radio_map_construction/runs/model_pth/UNet_SK/"# 模型存储位置
-device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-
-
-def batch_sample_images_torch(input_tensor, samples_per_image=4, fix_samples=0,
-                              num_samples_low=100, num_samples_high=200):
-    """
-    PyTorch优化的批量图像采样函数
-
-    参数:
-    input_tensor: 输入张量，形状为(B, C, H, W)
-    samples_per_image: 每张图像的采样次数 (默认4)
-    fix_samples: 固定采样点数 (0表示随机)
-    num_samples_low: 随机采样点数下限 (默认100)
-    num_samples_high: 随机采样点数上限 (默认200)
-
-    返回:
-    output: 采样后的张量，形状为(B*samples_per_image, C, H, W)
-    """
-    device = input_tensor.device
-    B, C, H, W = input_tensor.shape
-    total_samples = B * samples_per_image
-
-    # 预计算所有样本的采样点数
-    if fix_samples == 0:
-        num_samples_arr = torch.randint(num_samples_low, num_samples_high,
-                                        (total_samples,), device=device)
-    else:
-        num_samples_arr = torch.full((total_samples,), fix_samples,
-                                     device=device, dtype=torch.int32)
-
-    # 创建输出张量
-    output = torch.zeros((total_samples, C, H, W), device=device)
-
-    # 处理每个输出样本
-    for idx in range(total_samples):
-        # 确定对应的原始图像
-        b = idx // samples_per_image
-        img = input_tensor[b, 0]  # (H, W)
-
-        # 获取当前样本的采样点数
-        num_samples = num_samples_arr[idx].item()
-
-        # 生成随机采样点坐标
-        x_samples = torch.randint(0, H, (num_samples,), device=device)
-        y_samples = torch.randint(0, W, (num_samples,), device=device)
-
-        # 使用高级索引直接赋值
-        output[idx, 0, x_samples, y_samples] = img[x_samples, y_samples]
-
-    return output
-
+start_epoch = 15
+device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
 
 def evaluate(model, val_loader, device, writer, epoch):
     model.eval()  # Set model to evaluation mode
@@ -108,7 +62,7 @@ def evaluate(model, val_loader, device, writer, epoch):
     total_psnr = 0.0
 
     with torch.no_grad():
-        for inputs, targets in val_loader:
+        for inputs, targets in tqdm(val_loader, desc="Evaluating", ncols=100, leave=False):
             inputs = inputs.to(device)
             targets = targets.to(device)
 
@@ -157,15 +111,18 @@ def evaluate(model, val_loader, device, writer, epoch):
 
 
 
-def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
+def train(model, train_loader, val_loader, num_epochs, device, save_interval=1):
 
+
+    global start_epoch
     global log_dir
     global model_save_dir
+
+    eval_interval = 4
     # 清空 log_dir 下的文件（如果存在）
-    if os.path.exists(log_dir):
-        shutil.rmtree(log_dir)  # 删除整个目录及其内容
-    # 重新创建 log_dir
-    os.makedirs(log_dir)
+    if start_epoch == 0 and os.path.exists(log_dir):
+        shutil.rmtree(log_dir)
+    os.makedirs(log_dir, exist_ok=True)
 
     writer = SummaryWriter(log_dir=log_dir)  # TensorBoard SummaryWriter
 
@@ -176,7 +133,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
         weight_decay=0,          # L2正则化
         amsgrad=False               # 不使用AMSGrad
     )
-    warmup_epochs = 100
+
     scheduler = DynamicLRScheduler(
         optimizer,
         lr_min=1e-6,  # 最小学习率
@@ -184,12 +141,26 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
         warmup_epochs=warmup_epochs,  # 前warmup_epochs个epoch学习率上升
         decay_epochs=num_epochs - warmup_epochs  # 后面epoch学习率下降
     )
+    # 如果提供了检查点路径，加载优化器和调度器状态
+    # 这一次就直接只加载模型了下一次就优化器和模型一起加载
+    if start_epoch != 0:
+        checkpoint_path = os.path.join(model_save_dir, f"checkpoint_epoch_{start_epoch}.pth")
+        checkpoint = torch.load(checkpoint_path, weights_only=True)
+        model.load_state_dict(checkpoint)
+        print("加载历史数据成功")
+        # model.load_state_dict(checkpoint['model_state_dict'])
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        # scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        for _ in range(start_epoch):
+            scheduler.step()
+
+
 
     # 初始化动态损失
     criterion = torch.nn.MSELoss()
     model.to(device)
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         model.train()  # Set model to training mode
         running_loss = 0.0
 
@@ -205,11 +176,7 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
             inputs = inputs.to(device)
             targets = targets.to(device)
 
-            # 这里需要设置一下模型当前的运行模式
-
-            # Forward pass
             outputs = model(inputs)
-            # Calculate loss
             loss = criterion(outputs, targets)
 
             running_loss += loss.item()/inputs.shape[0]
@@ -217,10 +184,8 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
             # 更新进度条的显示信息
             train_loader_with_progress.set_postfix(
                 loss=f'{loss.item()/inputs.shape[0]:.4f}',  # 当前批次的损失
-                avg_loss=f'{running_loss / (train_loader_with_progress.n+1):.4f}'  # 当前平均损失
             )
 
-            # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -233,12 +198,20 @@ def train(model, train_loader, val_loader, num_epochs, device, save_interval=5):
         # Write loss to TensorBoard
         writer.add_scalar('Loss/train', avg_loss, epoch)
         # Evaluate the model after each epoch
-        evaluate(model, val_loader, device, writer, epoch)
+        if (epoch+1) % eval_interval == 0:
+            evaluate(model, val_loader, device, writer, epoch)
         # Save the model checkpoint every `save_interval` epochs
         if (epoch + 1) % save_interval == 0:
-            os.makedirs(model_save_dir, exist_ok=True)
-            torch.save(model.state_dict(), os.path.join(model_save_dir, f"checkpoint_epoch_{epoch+1}.pth"))
+            checkpoint = {
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+            }
+            torch.save(checkpoint, os.path.join(model_save_dir, f"checkpoint_epoch_{epoch+1}.pth"))
+            print("已经存储权重"+f"checkpoint_epoch_{epoch+1}.pth")
 
+    # 训练结束
     writer.close()
 
 
@@ -257,10 +230,10 @@ if __name__ == '__main__':
 
 
     net = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
-    # net.load_weights(os.path.join(model_load_dir, f"checkpoint_epoch_600.pth"))
+
     train_loader = dataloaders['train']
     val_loader = dataloaders['val']
-
+    os.makedirs(model_save_dir, exist_ok=True)
     # 开始训练
-    train(net, train_loader, val_loader, num_epochs=1000, device=device, save_interval=5)
+    train(net, train_loader, val_loader, num_epochs=totally_epochs, device=device)
 
