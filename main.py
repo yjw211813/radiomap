@@ -31,11 +31,11 @@ if __name__ == '__main__':
 
     # 训练标识
     print("inter_flag:",simuSetDict["inter_flag"])
-    print("MS_no_cars")
+    print("MS_no_cars256")
 
 
-    train_batch_size = 32  # 批次大小
-    val_batch_size = 32
+    train_batch_size = 50  # 批次大小
+    val_batch_size = 50
     test_batch_size = 8  # 批次大小
     warmup_epochs = 4
     total_epoch = 80
@@ -47,11 +47,11 @@ if __name__ == '__main__':
     C_down_list =  [32, 64, 128, 256]
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
     attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/UNet_MS_no_cars/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/UNet_MS_no_cars/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/UNet_MS_no_cars/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/MS_no_cars256/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型存储位置
     start_epoch = 0
-    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     # 定义训练对象
     app = Unet_BTM_app(start_epoch,log_dir,warmup_epochs,model_save_dir)
 
@@ -76,5 +76,5 @@ if __name__ == '__main__':
     os.makedirs(model_save_dir, exist_ok=True)
 
     load_epoch = 38
-    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/UNet_MS_no_cars/"
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/MS_no_cars256/"
     app.train( model, train_loader, val_loader, total_epoch, device)
