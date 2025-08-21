@@ -14,15 +14,14 @@ from tqdm import tqdm
 import torchvision
 
 
-
 class Unet_BTM_app():
-    def __init__(self, start_epoch,log_dir,warmup_epochs,model_save_dir):
+    def __init__(self, start_epoch, log_dir, warmup_epochs, model_save_dir):
         self.start_epoch = start_epoch
         self.log_dir = log_dir
         self.warmup_epochs = warmup_epochs
         self.model_save_dir = model_save_dir
 
-    def evaluate(self,model, val_loader, device, writer, epoch):
+    def evaluate(self, model, val_loader, device, writer, epoch):
         model.eval()  # Set model to evaluation mode
         total_samples = 0
         total_mse = 0.0
@@ -78,10 +77,8 @@ class Unet_BTM_app():
         writer.add_scalar('SSIM/val', avg_ssim, epoch)
         writer.add_scalar('PSNR/val', avg_psnr, epoch)
 
+    def train(self, model, train_loader, val_loader, total_epoch, device, save_interval=1):
 
-
-    def train(self,model, train_loader, val_loader, total_epoch, device, save_interval=1):
-        
         eval_interval = 4
         # 清空 log_dir 下的文件（如果存在）
         if self.start_epoch == 0 and os.path.exists(self.log_dir):
@@ -92,10 +89,10 @@ class Unet_BTM_app():
 
         optimizer = optim.Adam(
             params=model.parameters(),
-            lr=1e-4,                   # 学习率
-            betas=(0.9, 0.999),         # 动量参数
-            weight_decay=0,          # L2正则化
-            amsgrad=False               # 不使用AMSGrad
+            lr=1e-4,  # 学习率
+            betas=(0.9, 0.999),  # 动量参数
+            weight_decay=0,  # L2正则化
+            amsgrad=False  # 不使用AMSGrad
         )
 
         scheduler = DynamicLRScheduler(
@@ -118,7 +115,6 @@ class Unet_BTM_app():
             # for _ in range(self.start_epoch):
             #     scheduler.step()
 
-
         # 初始化动态损失
         criterion = torch.nn.MSELoss()
         model.to(device)
@@ -130,7 +126,7 @@ class Unet_BTM_app():
             # 创建tqdm进度条
             train_loader_with_progress = tqdm(
                 train_loader,
-                desc=f'Epoch {epoch+1}/{total_epoch}',  # 进度条前缀
+                desc=f'Epoch {epoch + 1}/{total_epoch}',  # 进度条前缀
                 leave=True,  # 进度条完成后保留显示
                 dynamic_ncols=True  # 自动调整宽度
             )
@@ -142,11 +138,11 @@ class Unet_BTM_app():
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
 
-                running_loss += loss.item()/inputs.shape[0]
+                running_loss += loss.item() / inputs.shape[0]
 
                 # 更新进度条的显示信息
                 train_loader_with_progress.set_postfix(
-                    loss=f'{loss.item()/inputs.shape[0]:.4f}',  # 当前批次的损失
+                    loss=f'{loss.item() / inputs.shape[0]:.4f}',  # 当前批次的损失
                 )
 
                 optimizer.zero_grad()
@@ -157,15 +153,15 @@ class Unet_BTM_app():
             scheduler.step()
 
             avg_loss = running_loss / len(train_loader)
-            print(f"Epoch [{epoch+1}/{total_epoch}], Train Loss: {avg_loss:.4f}")
-            
+            print(f"Epoch [{epoch + 1}/{total_epoch}], Train Loss: {avg_loss:.4f}")
+
             # Write loss to TensorBoard
             writer.add_scalar('Loss/train', avg_loss, epoch)
-            
+
             # Evaluate the model after each epoch
-            if (epoch+1) % eval_interval == 0:
+            if (epoch + 1) % eval_interval == 0:
                 self.evaluate(model, val_loader, device, writer, epoch)
-            
+
             # Save the model checkpoint every `save_interval` epochs
             if (epoch + 1) % save_interval == 0:
                 checkpoint = {
@@ -174,15 +170,13 @@ class Unet_BTM_app():
                     'optimizer_state_dict': optimizer.state_dict(),
                     'scheduler_state_dict': scheduler.state_dict(),
                 }
-                torch.save(checkpoint, os.path.join(self.model_save_dir, f"checkpoint_epoch_{epoch+1}.pth"))
-                print("已经存储权重"+f"checkpoint_epoch_{epoch+1}.pth")
+                torch.save(checkpoint, os.path.join(self.model_save_dir, f"checkpoint_epoch_{epoch + 1}.pth"))
+                print("已经存储权重" + f"checkpoint_epoch_{epoch + 1}.pth")
 
         # 训练结束
         writer.close()
 
-
-    def test(self,model,load_epoch, val_loader, device, val_dir):
-
+    def test(self, model, load_epoch, test_loader, device, val_dir):
 
         if load_epoch != 0:
             checkpoint_path = os.path.join(self.model_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
@@ -190,14 +184,12 @@ class Unet_BTM_app():
             print(f"加载历史数据load_epoch:{load_epoch}成功")
             model.load_state_dict(checkpoint['model_state_dict'])
 
-
-
         model.eval()  # Set model to evaluation mode
         total_samples = 0
         total_mse = 0.0
         total_energy = 0.0  # 用于NMSE的分母计算（目标的总能量）
         total_ssim = 0.0
-        total_psnr = 0.0  
+        total_psnr = 0.0
         # 创建目录保存验证结果图像
         os.makedirs(val_dir, exist_ok=True)
         # 用于跟踪每个batch的指标
@@ -207,14 +199,11 @@ class Unet_BTM_app():
         batch_indices = []
 
         with torch.no_grad():
-            for batch_idx, (inputs, targets, samples) in enumerate(val_loader):
+            for inputs, targets in tqdm(test_loader, desc="Testing", ncols=100, leave=False):
                 inputs = inputs.to(device)
                 targets = targets.to(device)
-                samples = samples.to(device)
-                samples = samples * targets
-                inputs = torch.cat((inputs, samples), 1)
 
-                # 前向传播
+                # Forward pass
                 outputs = model(inputs)
 
                 # 获取当前batch的样本数
@@ -285,7 +274,7 @@ class Unet_BTM_app():
                 # 创建并排对比图
                 comparison = torch.cat([targets[0:1], outputs[0:1]], dim=3)
                 grid = torchvision.utils.make_grid(comparison, nrow=1, normalize=True, scale_each=True)
-        
+
         # ========== 损失可视化 ==========
         plt.figure(figsize=(15, 5))
 

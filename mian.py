@@ -35,7 +35,8 @@ if __name__ == '__main__':
 
 
     train_batch_size = 32  # 批次大小
-    test_batch_size = 32  # 批次大小
+    val_batch_size = 32
+    test_batch_size = 8  # 批次大小
     warmup_epochs = 2
     totally_epochs = 80
     if simuSetDict["inter_flag"] == True:
@@ -62,7 +63,8 @@ if __name__ == '__main__':
 
     dataloaders = {
         'train': DataLoader(Radio_train, batch_size=train_batch_size, shuffle=True, num_workers=4),
-        'val': DataLoader(Radio_val, batch_size=test_batch_size, shuffle=True, num_workers=4)
+        'val': DataLoader(Radio_val, batch_size=val_batch_size, shuffle=True, num_workers=4),
+        'test': DataLoader(Radio_test, batch_size=test_batch_size, shuffle=True, num_workers=4)
     }
 
     # 定义模型
@@ -70,6 +72,9 @@ if __name__ == '__main__':
 
     train_loader = dataloaders['train']
     val_loader = dataloaders['val']
+    test_loader = dataloaders['test']
     os.makedirs(model_save_dir, exist_ok=True)
 
-    app.train(model, train_loader, val_loader, totally_epochs, device, save_interval=1)
+    load_epoch = 38
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/UNet_SK/"
+    app.test(model,load_epoch, test_loader, device, val_dir)
