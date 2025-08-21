@@ -18,8 +18,8 @@ if __name__ == '__main__':
         "numTx": 80,  # 信源数量设定
         "thresh": 0.05,  # 环境噪声
         "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
-        "carsSimul": "yes",  # 是否开启小车作为仿真
-        "carsInput": "yes",  # 是否将小车图作为模型输入
+        "carsSimul": "no",  # 是否开启小车作为仿真
+        "carsInput": "no",  # 是否将小车图作为模型输入
         "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
         "cityMap": "complete",  # 是否输入完全的城市地图
         "missing": 1,  # 地图缺失号码
@@ -38,8 +38,8 @@ if __name__ == '__main__':
     val_batch_size = 32
     test_batch_size = 8  # 批次大小
     warmup_epochs = 2
-    totally_epochs = 80
-    if simuSetDict["inter_flag"] == True:
+    total_epoch = 80
+    if simuSetDict["carsInput"] !="no":
         BTM_ghost_UNet_input_shape = [5, 256, 256]
     else:
         BTM_ghost_UNet_input_shape = [4, 256, 256]
@@ -77,4 +77,4 @@ if __name__ == '__main__':
 
     load_epoch = 38
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/UNet_SK/"
-    app.test(model,load_epoch, test_loader, device, val_dir)
+    app.train( model, train_loader, val_loader, total_epoch, device, save_interval=1)
