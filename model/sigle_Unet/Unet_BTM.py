@@ -6,7 +6,7 @@ import os
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
 from model.sub_block.Channel_atten_block import SK_Channel_atten2D
-from model.sub_block.conv2D_block import Conv_DownSampling2D,Fractal_multi_scale2D,ConvTranspose_UpSam
+from model.sub_block.conv2D_block import Conv_DownSampling2D,Fractal_multi_scale2D,ConvTranspose_UpSam,multi_scale_block2D
 from torch.nn import functional as F
 
 
@@ -27,9 +27,9 @@ class BTM_Net(nn.Module):
         C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
         # 构建编码器
         layers = []
-        layers.append(SK_Channel_atten2D(self.output_H,C_in=self.input_channel, C_out=C_list[0], kernel_sizes=[3, 5, 7, 9], dilated_list=[1,1,1,1]))
+        layers.append(multi_scale_block2D(C_in=self.input_channel, C_out=C_list[0], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
         for i in range(len(C_list) - 1):
-            layers.append(SK_Channel_atten2D(self.output_H,C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=[3, 5, 7, 9], dilated_list=[1,1,1,1]))
+            layers.append(multi_scale_block2D(C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
         self.encoder = nn.Sequential(*layers)
         self.gelu = nn.GELU()
 
@@ -48,17 +48,14 @@ class Unet_BTM(nn.Module):
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
         kernel_sizes = [3, 5, 7, 9]
-        dilated_list = [1, 1, 1, 1]
-        img_size = self.input_H
         # 创建下采样路径（编码器）
         self.encoder = nn.ModuleList()
         in_ch = self.input_channel
         for out_ch in C_down_list:
             self.encoder.append(nn.Sequential(
-                SK_Channel_atten2D(img_size,C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_list=dilated_list),
+                multi_scale_block2D(C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_num=1),
                 Conv_DownSampling2D(out_ch)
             ))
-            img_size = img_size // 2
             in_ch = out_ch
 
         # 中心卷积层
@@ -70,11 +67,10 @@ class Unet_BTM(nn.Module):
             i = i -1
             self.decodes.append(
                 nn.Sequential(
-                    SK_Channel_atten2D(img_size,C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes, dilated_list=dilated_list),
+                    multi_scale_block2D(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes,dilated_num=1),
                     ConvTranspose_UpSam(C_down_list[i])
                 )
             )
-            img_size = int(img_size * 2)
         # 创建注意力模块
         self.attentions = nn.ModuleList()
         attn_channels = [
