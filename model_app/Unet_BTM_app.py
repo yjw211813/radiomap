@@ -183,46 +183,47 @@ class Unet_BTM_app():
             outputs = outputs.cpu().numpy()
         if torch.is_tensor(targets):
             targets = targets.cpu().numpy()
-        
+
         # 移除通道维度 (batch_size, 1, H, W) -> (batch_size, H, W)
         outputs = outputs.squeeze(1)
         targets = targets.squeeze(1)
-        
+
         num_batches = outputs.shape[0]
-        
+
         # 创建一个大图像，包含所有批次的对比
         fig, axes = plt.subplots(2, num_batches, figsize=(5 * num_batches, 10))
-        
+
         # 处理只有1个批次的情况
         if num_batches == 1:
             axes = axes.reshape(2, 1)
-        
+
         for i in range(num_batches):
             # 获取当前批次的target和output
             target_img = targets[i]
             output_img = outputs[i]
-            
+
             # 显示target
             ax = axes[0, i]
             im = ax.imshow(target_img, cmap='jet')
             ax.set_title(f"Target (Sample {i})")
             ax.axis('off')
-            
+
             # 显示output
             ax = axes[1, i]
             im = ax.imshow(output_img, cmap='jet')
             ax.set_title(f"Output (Sample {i})")
             ax.axis('off')
-        
+
         # 添加一个共享的颜色条
         cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
         fig.colorbar(im, cax=cbar_ax)
-        
+
         plt.tight_layout(rect=[0, 0, 0.9, 1])
         plt.savefig(os.path.join(val_dir, f"batch_{batch_idx}_comparison.png"), dpi=300, bbox_inches='tight')
         plt.close()
 
     def test(self, model, load_epoch, test_loader, device, val_dir):
+
         if load_epoch != 0:
             checkpoint_path = os.path.join(self.model_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
             checkpoint = torch.load(checkpoint_path, weights_only=True)
@@ -244,7 +245,7 @@ class Unet_BTM_app():
         batch_indices = []
 
         with torch.no_grad():
-            for batch_idx, (inputs, targets) in enumerate(tqdm(test_loader, desc="Testing", ncols=100, leave=False)):
+            for inputs, targets in tqdm(test_loader, desc="Testing", ncols=100, leave=False):
                 inputs = inputs.to(device)
                 targets = targets.to(device)
 
@@ -284,8 +285,36 @@ class Unet_BTM_app():
                 batch_psnr_losses.append(psnr_batch.item())
                 batch_indices.append(batch_idx)
 
-                # 调用create_horizontal_comparison函数
-                self.create_horizontal_comparison(outputs, targets, batch_idx, val_dir)
+                # ========== 可视化图像保存 ==========
+                # 只取批次中的第一个样本进行可视化
+                target_img = targets[0].cpu().numpy()
+                output_img = outputs[0].cpu().numpy()
+
+                # 处理单通道图像
+                if target_img.shape[0] == 1:
+                    target_img = target_img.squeeze(0)
+                    output_img = output_img.squeeze(0)
+
+                # 创建对比图像
+                fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+
+                # 显示target
+                ax = axes[0]
+                im = ax.imshow(target_img, cmap='jet')
+                ax.set_title(f"Target (Batch {batch_idx})")
+                ax.axis('off')
+                fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+                # 显示output
+                ax = axes[1]
+                im = ax.imshow(output_img, cmap='jet')
+                ax.set_title(f"Output (Batch {batch_idx})")
+                ax.axis('off')
+                fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+                plt.tight_layout()
+                plt.savefig(os.path.join(val_dir, f"epoch_batch_{batch_idx}.png"))
+                plt.close()
 
                 # ========== TensorBoard图像记录 ==========
                 # 创建并排对比图
@@ -340,7 +369,5 @@ class Unet_BTM_app():
         print(f"val RMSE: {avg_rmse:.4f}")
         print(f"val SSIM: {avg_ssim:.4f}")
         print(f"val PSNR: {avg_psnr:.4f}")
-
-
 
 
