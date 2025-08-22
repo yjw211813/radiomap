@@ -1,7 +1,14 @@
 import torch
 
-A = torch.randn(8, 64, 64, 64)  # 形状 (8, 64, 64, 64)
-B = torch.randn(8, 1, 64, 64)   # 形状 (8, 1, 64, 64)
+# 检查可用GPU数量
+print(f"可用GPU数量: {torch.cuda.device_count()}")
+for i in range(torch.cuda.device_count()):
+    print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
 
-result = A * B  # 自动广播，结果形状 (8, 64, 64, 64)
-print(result.shape)  # 输出: torch.Size([8, 64, 64, 64])
+# 设置使用正确的设备
+if torch.cuda.device_count() > 0:
+    device = torch.device("cuda:2")  # 使用第一个可用GPU
+else:
+    device = torch.device("cpu")
+
+print(f"使用设备: {device}")
