@@ -223,7 +223,6 @@ class Unet_BTM_app():
         plt.close()
 
     def test(self, model, load_epoch, test_loader, device, val_dir):
-
         if load_epoch != 0:
             checkpoint_path = os.path.join(self.model_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
             checkpoint = torch.load(checkpoint_path, weights_only=True)
@@ -245,7 +244,7 @@ class Unet_BTM_app():
         batch_indices = []
 
         with torch.no_grad():
-            for inputs, targets in tqdm(test_loader, desc="Testing", ncols=100, leave=False):
+            for batch_idx, (inputs, targets) in enumerate(tqdm(test_loader, desc="Testing", ncols=100, leave=False)):
                 inputs = inputs.to(device)
                 targets = targets.to(device)
 
@@ -285,36 +284,8 @@ class Unet_BTM_app():
                 batch_psnr_losses.append(psnr_batch.item())
                 batch_indices.append(batch_idx)
 
-                # ========== 可视化图像保存 ==========
-                # 只取批次中的第一个样本进行可视化
-                target_img = targets[0].cpu().numpy()
-                output_img = outputs[0].cpu().numpy()
-
-                # 处理单通道图像
-                if target_img.shape[0] == 1:
-                    target_img = target_img.squeeze(0)
-                    output_img = output_img.squeeze(0)
-
-                # 创建对比图像
-                fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-
-                # 显示target
-                ax = axes[0]
-                im = ax.imshow(target_img, cmap='jet')
-                ax.set_title(f"Target (Batch {batch_idx})")
-                ax.axis('off')
-                fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-                # 显示output
-                ax = axes[1]
-                im = ax.imshow(output_img, cmap='jet')
-                ax.set_title(f"Output (Batch {batch_idx})")
-                ax.axis('off')
-                fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-                plt.tight_layout()
-                plt.savefig(os.path.join(val_dir, f"epoch_batch_{batch_idx}.png"))
-                plt.close()
+                # 调用create_horizontal_comparison函数
+                self.create_horizontal_comparison(outputs, targets, batch_idx, val_dir)
 
                 # ========== TensorBoard图像记录 ==========
                 # 创建并排对比图
@@ -369,5 +340,7 @@ class Unet_BTM_app():
         print(f"val RMSE: {avg_rmse:.4f}")
         print(f"val SSIM: {avg_ssim:.4f}")
         print(f"val PSNR: {avg_psnr:.4f}")
+
+
 
 
