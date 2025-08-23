@@ -32,7 +32,7 @@ docker stop liaozhengyan_GPU && docker rm liaozhengyan_GPU
 #### Instructions
 wsl --shutdown
 
-diskpart1
+diskpart
 select vdisk file="C:\Users\Administrator\AppData\Local\Docker\wsl\disk\docker_data.vhdx"
 compact vdisk
 detach vdisk
