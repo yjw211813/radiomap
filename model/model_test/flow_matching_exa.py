@@ -3,7 +3,7 @@ import torch
 
 from torch import nn, Tensor
 
-# flow_matching
+# flow_matching_model
 from flow_matching.path.scheduler import CondOTScheduler
 from flow_matching.path import AffineProbPath
 from flow_matching.solver import Solver, ODESolver

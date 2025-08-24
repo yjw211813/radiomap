@@ -5,7 +5,7 @@ from model_app.flowMatchingApp import flowMatching_app
 from torch.utils.tensorboard import SummaryWriter
 from data.lib.loaders import RadioMapSeerLoader
 from torch.utils.data import DataLoader
-from model.flow_matching_dir.volecity_predict import velocity_UNet
+from model.flow_matching_model.volecity_predict import velocity_UNet
 
 
 if __name__ == '__main__':

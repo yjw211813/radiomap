@@ -4,15 +4,9 @@ import torch
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as F
-from model.sub_block.conv2D_block import *
+from model.sub_block.conv2D_block import Fractal_multi_scale2D,multi_scale_block2D,Conv_DownSampling2D,ConvTranspose_UpSam
 
-# def drop_connect(x, drop_ratio):
-#     keep_ratio = 1.0 - drop_ratio
-#     mask = torch.empty([x.shape[0], 1, 1, 1], dtype=x.dtype, device=x.device)
-#     mask.bernoulli_(p=keep_ratio)
-#     x.div_(keep_ratio  )# 4. 缩放输入以保持期望值不变
-#     x.mul_(mask  )# 5. 应用掩码 - 随机将整个特征图置零
-#     return x
+
 
 class Swish(nn.Module):
     def forward(self, x):
@@ -24,55 +18,77 @@ class TimeEmbedding(nn.Module):
     def __init__(self, T, d_model, img_H, img_W):
         self.img_H, self.img_W = img_H, img_W
         assert d_model % 2 == 0
+        self.d_model = d_model
+        self.T = T
         super().__init__()
-        # 将math.log(10000)分成 d_model/2 份
-        emb = torch.arange(0, d_model, step=2) / d_model * math.log(10000)
-        # 映射到 (0.0001, 1]
-        emb = torch.exp(-emb)
-        pos = torch.arange(T).float()
-        #逐元素乘法 (T, d_model/2) T是频率步数 emb 则是频率
-        emb = pos[:, None] * emb[None, :]
-        assert list(emb.shape) == [T, d_model // 2]
-        # 得到两个正交分量矩阵  (T, d_model//2,2)
-        emb = torch.stack([torch.sin(emb), torch.cos(emb)], dim=-1)
-        assert list(emb.shape) == [T, d_model // 2, 2]
-        # 先放所有 sin，再放所有 cos
-        emb = emb.view(T, d_model)
+        # 验证维度是偶数
+        assert d_model % 2 == 0, "d_model must be even"
+        # 预计算频率基础参数 (固定)
+        freqs = torch.pow(
+            10000,
+            torch.arange(0, d_model // 2) / (d_model // 2)
+        )
+        self.register_buffer('freqs', freqs)
+
 
         self.timembedding = nn.Sequential(
-            # 时间编码过程  并且 freeze=False 是可以梯度下降的 为 nn.Embedding.from_pretrained
-            nn.Embedding.from_pretrained(emb, freeze=False),
             nn.Linear(d_model, self.img_H),
             Swish(),
             nn.Linear(self.img_H, self.img_H*self.img_W),
         )
 
     def forward(self, t):
-        emb = self.timembedding(t).reshape(-1,1, self.img_H, self.img_W)
+        """
+        前向传播
+        Args:
+            t (torch.Tensor): 时间向量，形状为 [B]，值在[0,1]范围内
+        Returns:
+            torch.Tensor: 时间嵌入特征图，形状为 [B, 1, H, W]
+        """
+        # 1. 将时间扩展到模型范围 [0, self.T]
+        scaled_t = t * self.T  # [B]
+        if scaled_t.dim() == 0:
+            scaled_t = scaled_t.unsqueeze(0)  # 如果是标量，转为1维
+        # 2. 计算正弦/余弦分量 [B, d_model//2]
+        emb = scaled_t[:, None] / self.freqs  # [B, d_model//2]
+        sin_emb = torch.sin(emb)
+        cos_emb = torch.cos(emb)
 
-        return emb
+        # 3. 拼接特征 [B, d_model]
+        emb = torch.cat([sin_emb, cos_emb], dim=-1)
 
-def TEmbeding_block():
-    # 测试参数
-    T = 1000  # 时间步总数
-    d_model = 128  # 嵌入维度
-    img_H,img_W = 256,256  # 输出维度
-    batch_size = 8  # 批大小
-    # 创建测试实例
-    time_embedding = TimeEmbedding(T, d_model, img_H, img_W)
-    # 生成随机时间步 (范围在 0 到 T-1 之间)
-    t = torch.randint(0, T, (batch_size,))
+        # 4. 通过神经网络调整 [B, d_model] -> [B, H*W]
+        emb = self.timembedding(emb)
+
+        # 5. 重塑为空间特征图 [B, 1, H, W]
+        return emb.reshape(-1, 1, self.img_H, self.img_W)
+
+
+# 测试函数
+def test_TimeEmbedding():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    T = 1000
+    d_model = 128
+    img_H, img_W = 64, 64
+    batch_size = 8
+
+    # 创建连续时间嵌入模块
+    time_embedding = TimeEmbedding(T,d_model, img_H, img_W)
+    time_embedding.to(device)
+    # 生成连续时间输入 (范围[0,1])
+    t = torch.rand(batch_size).to(device) # 连续时间
+
     # 前向传播
     output = time_embedding(t)
-    # 打印结果
-    print("输入时间步形状:", t.shape)
-    print("输出嵌入形状:", output.shape)
-    print("\n前几个时间步的输出示例:")
-    # print(output[:3])  # 打印前3个样本的输出
 
-    # 验证梯度计算
+    print("输入时间形状:", t.shape)
+    print("输出嵌入形状:", output.shape)
+    print("输出范围: [{:.4f}, {:.4f}]".format(
+        output.min().item(), output.max().item()))
+
+    # 梯度测试
     output.sum().backward()
-    print("\n梯度计算成功完成!")
+    print("梯度计算成功完成!")
 
 
 
@@ -87,9 +103,10 @@ class ConditionalEmbedding(nn.Module):
         C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
         # 构建编码器
         layers = []
-        layers.append(Res_Inception_ghost2D(C_in=self.input_channel, C_out=C_list[0], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
+
+        layers.append(multi_scale_block2D(C_in=self.input_channel, C_out=C_list[0], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
         for i in range(len(C_list) - 1):
-            layers.append(Res_Inception_ghost2D(C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
+            layers.append(multi_scale_block2D(C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
         self.encoder = nn.Sequential(*layers)
         self.gelu = nn.GELU()
 
@@ -101,7 +118,7 @@ class ConditionalEmbedding(nn.Module):
         return out_map
 
 def ConditionalEmbedding_test():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     batch_size = 8
     input_shape = [4,256,256]
     output_shape = [64,64,64]
@@ -140,10 +157,10 @@ class UpSample(nn.Module):
         return x
 
 
-class noise_UNet(nn.Module):
+class velocity_UNet(nn.Module):
     # 修改上卷积方法
     def __init__(self, T, input_shape, output_shape, C_down_list,attn_params):
-        super(noise_UNet, self).__init__()
+        super(velocity_UNet, self).__init__()
         tdim = max(C_down_list) * 4
 
         self.input_channel, self.input_H, self.input_W = input_shape
@@ -154,13 +171,13 @@ class noise_UNet(nn.Module):
         in_ch = self.input_channel
         for out_ch in C_down_list:
             self.encoder.append(nn.Sequential(
-                Res_Inception_ghost2D(C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_num=2),
+                multi_scale_block2D(C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_num=2),
                 Conv_DownSampling2D(out_ch)
             ))
             in_ch = out_ch
 
         # 中心卷积层
-        self.conv_center = Res_Fractal_inception2D(input_channel=C_down_list[-1],output_channel=C_down_list[-1])
+        self.conv_center = Fractal_multi_scale2D(input_channel=C_down_list[-1],output_channel=C_down_list[-1])
 
         # 创建上采样路径（解码器）
         self.decodes = nn.ModuleList()
@@ -168,13 +185,14 @@ class noise_UNet(nn.Module):
             i = i -1
             self.decodes.append(
                 nn.Sequential(
-                    Res_Inception_ghost2D(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes,dilated_num=1),
+                    multi_scale_block2D(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes,dilated_num=1),
                     ConvTranspose_UpSam(C_down_list[i])
                 )
             )
         # 创建注意力模块
         self.attentions = nn.ModuleList()
-        self.TimeEmbeddings = nn.ModuleList()
+        self.TimeEmbedding_up = nn.ModuleList()
+        self.TimeEmbedding_down = nn.ModuleList()
         attn_channels = [
             C_down_list[2] // 4,  # 对应第4层
             C_down_list[1] // 4,  # 对应第3层
@@ -189,7 +207,8 @@ class noise_UNet(nn.Module):
                 [ch, self.input_H // factor, self.input_W // factor],
                 param
             ))
-            self.TimeEmbeddings.append(TimeEmbedding(T, tdim, self.input_H // factor, self.input_W // factor))
+            self.TimeEmbedding_up.append(TimeEmbedding(T, tdim, self.input_H // factor, self.input_W // factor))
+            self.TimeEmbedding_down.append(TimeEmbedding(T, tdim, self.input_H // factor, self.input_W // factor))
 
         # 输出层
         now_ch = C_down_list[0] // 2
@@ -202,16 +221,19 @@ class noise_UNet(nn.Module):
     def forward(self, x_t, t, condition_info):
         # 解码器路径
         attn_outputs = []
-        time_outputs = []
+        time_outputs_up = []
+        time_outputs_down = []
         x_in = torch.cat([x_t, condition_info], dim=1)
         for i in range(len(self.attentions)):
             attn_outputs.append(self.attentions[i](x_in).repeat(1, self.repeat_factors[i], 1, 1))
-        for i in range(len(self.TimeEmbeddings)):
-            time_outputs.append(self.TimeEmbeddings[i](t))
+        for i in range(len(self.TimeEmbedding_up)):
+            time_outputs_up.append(self.TimeEmbedding_up[i](t))
+            time_outputs_down.append(self.TimeEmbedding_down[i](t))
         # 编码器路径
         encoder_outs = []
-        for layer in self.encoder:
-            x_in = layer(x_in)
+
+        for i in range(len(self.encoder)):
+            x_in = self.encoder[i](x_in) + time_outputs_down[len(self.encoder) - i - 1]
             encoder_outs.append(x_in)
 
         # 中心处理
@@ -223,7 +245,7 @@ class noise_UNet(nn.Module):
             # 上采样卷积
             x = self.decodes[i](x)
             # 应用注意力机制
-            x = (x + attn_outputs[i])*time_outputs[i]
+            x = x + attn_outputs[i] + time_outputs_up[i]
             # 跳跃连接（拼接编码器特征）
             skip_idx = len(encoder_outs) - 2 - i
             if skip_idx >= 0:
@@ -238,8 +260,9 @@ class noise_UNet(nn.Module):
         print(f"Loaded weights from {checkpoint_path}")
 
 
-def noise_UNet_test():
-    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+
+def velocity_UNet_test():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)
     batch_size = 8
     T = 1000
@@ -247,23 +270,39 @@ def noise_UNet_test():
     img_W = 256
     condition_info = torch.randn(batch_size, 4, img_H, img_W).to(device)
     x_t = torch.randn(batch_size, 1, img_H, img_W).to(device)
-    t = torch.randint(1000, size=[batch_size]).to(device)
+    t = torch.rand(batch_size).to(device)
     BTM_ghost_UNet_input_shape = [condition_info.shape[1]+1, condition_info.shape[2], condition_info.shape[3]]
     BTM_ghost_UNet_output_shape = [1, condition_info.shape[2], condition_info.shape[3]]
     C_down_list = [64, 128, 256, 512]
     C_list_attn = torch.tensor([64, 64, 128, 128, 128])
     attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-    net = noise_UNet(T,BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
+    net = velocity_UNet(T,BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
     output = net(x_t, t, condition_info)
     print(f"Output shape: {output.shape}")
 
 
 
 if __name__ == '__main__':
+    # test_TimeEmbedding()
+    # ConditionalEmbedding_test()
+    velocity_UNet_test()
+
+
+
+
+
+
+
+
+
+
+
+
     # ConditionalEmbedding_test()
     # noise_UNet_test()
     # TEmbeding_block()
-    noise_UNet_test()
+    # test_TimeEmbedding()
+    # velocity_UNet_test()
     #
     # #注意力模块
     #

@@ -8,10 +8,10 @@ from tqdm import tqdm
 from torchmetrics.functional import peak_signal_noise_ratio as psnr
 from torchmetrics.functional import structural_similarity_index_measure as ssim
 
-from model.flow_matching_dir.Scheduler import GradualWarmupScheduler
+from model.flow_matching_model.Scheduler import GradualWarmupScheduler
 from flow_matching.path.scheduler import CondOTScheduler
 from flow_matching.path import AffineProbPath
-from flow_matching.solver import Solver, ODESolver
+from flow_matching.solver import ODESolver
 from flow_matching.utils import ModelWrapper
 import matplotlib.pyplot as plt
 import math

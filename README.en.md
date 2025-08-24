@@ -166,3 +166,9 @@ python3 /home/code/radioMap/train/Unet_BTM_train.py
 条件训练的代码需要写一个if else
 采样过程需要将求解算法和速度预测分开
 需要将DDPM扩散过程进行对象化
+
+flowmatching setting
+------------------------------
+flowmatching APP.py  volecity_predict.py
+---------------------------
+scheduler.py
