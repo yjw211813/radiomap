@@ -44,6 +44,7 @@ if __name__ == '__main__':
     log_dir = r'/home/code/radio_map_construction/runs/model_log/MS_no_cars256/'# log 存储位置
     model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型加载目录
     model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型存储位置
+
     os.makedirs(model_save_dir, exist_ok=True)
     # 训练标识
     print("inter_flag:",simuSetDict["inter_flag"])

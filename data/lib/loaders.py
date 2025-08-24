@@ -28,8 +28,7 @@ class RadioMapSeerLoader(Dataset):
                  phase="train",  # 数据集阶段："train", "val", "test", "custom"
                  transform=transforms.ToTensor()):
 
-
-
+        self.scale256_flag = False
         # 将设置字典中的参数转为类属性
         for key, value in simuSetDict.items():
             setattr(self, key, value)
@@ -45,7 +44,7 @@ class RadioMapSeerLoader(Dataset):
 
         self.height = 256
         self.width = 256
-        self.scale256_flag = True
+
 
     def _init_index(self, maps_inds, phase):
         """初始化地图索引和数据集范围"""

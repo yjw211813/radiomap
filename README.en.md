@@ -102,7 +102,6 @@ sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
 2.引入新的模型和数据集进行算法验证
 3.做第一篇小论文的汇报ppt
 
-
 4.开始写小论文的文字稿部分
 可以开始写小论文相关介绍部分和贡献部分
 4.将现有网络引入到当前的DDPM,DDIM,RFLOW中去
@@ -116,126 +115,12 @@ sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
 py2001进行计算
 信号 传播 信噪比计算 
 
-v1 [1,3,5,7] 卷积核
-val avg_nmse_loss: 0.0064
-val Loss: 0.0039
-val avg_ssim_loss: 0.9237
-val avg_psnr_loss: 34.3554
-
-v2 [3,5,7,9] 增大感受野 现在最优
-val avg_nmse_loss: 0.0068
-val Loss: 0.0041
-val avg_ssim_loss: 0.9324
-val avg_psnr_loss: 34.3426
-只是精度更为稳定，最高性能提升并不是很大
-
-v3 [3,5,7,9] 空洞卷积加 残差模块
-val avg_nmse_loss: 0.0085
-val Loss: 0.0044
-val avg_ssim_loss: 0.9354
-val avg_psnr_loss: 33.1609
-v4 [3,5,7,9] 增大感受野 + 残差模块
-
-val NMSE: 0.0095
-val RMSE: 0.0231
-val SSIM: 0.9408
-val PSNR: 32.6419
-
-multi_scale v5 将多尺度卷积核加入到注意力核和 Unet卷积网络中没有动中间的分形卷积
-Epoch [947/2000], Train Loss: 0.0000
-val NMSE: 0.0060
-val RMSE: 0.0183
-val SSIM: 0.9158
-val PSNR: 34.6274
-
-multi_scale v6 将多尺度卷积核加入到注意力核和 Unet卷积网络 全部替换成 多尺度卷积
-Epoch [779/2000], Train Loss: 0.0000
-val NMSE: 0.0052
-val RMSE: 0.0171
-val SSIM: 0.9325
-val PSNR: 35.2647
-Epoch [959/2000], Train Loss: 0.0000
-val NMSE: 0.0050
-val RMSE: 0.0167
-val SSIM: 0.9194
-val PSNR: 35.4381
-ghost v6 在原有v1的基础上将网络加深
-Epoch [491/2000], Train Loss: 0.0000
-val NMSE: 0.0069
-val RMSE: 0.0197
-val SSIM: 0.9254
-val PSNR: 33.9588
-
-multi_scale v7 加入 SSIM loss到训练中：
-Epoch [209/2000], Train Loss: 0.0001
-val NMSE: 0.0058
-val RMSE: 0.0180
-val SSIM: 0.8694
-val PSNR: 34.8455
-
-multi_scale v8 降低 SSIM loss对整体loss的影响
-好像图像过于平滑了
-
-multi_scale v9 降低 SSIM loss对整体loss的影响 在8的基础上引入随机loss
-8的效果训练过程不太稳定
-然后
-Epoch [1848/2000], Train Loss: 0.0000
-val NMSE: 0.0060
-val RMSE: 0.0183
-val SSIM: 0.9333
-val PSNR: 34.6058
-
-Epoch [682/2000], Train Loss: 0.0000
-val NMSE: 0.0060
-val RMSE: 0.0183
-val SSIM: 0.9278
-val PSNR: 34.6751
-Epoch [569/2000], Train Loss: 0.0000
-val NMSE: 0.0059
-val RMSE: 0.0182
-val SSIM: 0.9279
-val PSNR: 34.7340
-
-multi_scale v10 使用对数化的 傅里叶loss来训练模型
-val NMSE: 0.0054
-val RMSE: 0.0175
-val SSIM: 0.9374
-val PSNR: 35.0713
-Epoch [854/2000], Train Loss: 0.0021
-val NMSE: 0.0119
-val RMSE: 0.0259
-val SSIM: 0.9775
-val PSNR: 31.6579
-
-Epoch [11/2000], Train Loss: 0.0014
-val NMSE: 0.0067
-val RMSE: 0.0194
-val SSIM: 0.9464
-val PSNR: 34.0944
-
-
-multi_scale v11 增加傅里叶高频区域loss
-val NMSE: 0.0052
-val RMSE: 0.0171
-val SSIM: 0.9338
-val PSNR: 35.2107
-
-Epoch [12/2000], Train Loss: 0.0005
-val NMSE: 0.0064
-val RMSE: 0.0189
-val SSIM: 0.9507
-val PSNR: 34.3358
-
 v1 到 v2 就是从重排上采样到反卷积上采样
 v2 到 v3 就是将原来的inception变成残差模块，加大了卷积核大小，并且加了空洞
 v3 到 v4 则是去掉其中的空洞喝扩大卷积核 只用残差模块
 v4 到 v6 则是将网络加深 然后还是使用元素重排上采样
 v4 到 multi_v5 将其中残差卷积块换成了多尺度卷积块
 multi_v5 到 multi_v6 则是将中间残差分形卷积换成不是残差的分形卷积
-
-
-
-
 
 无人机 采购 到货
 无人机试飞做实验
@@ -244,11 +129,7 @@ multi_v5 到 multi_v6 则是将中间残差分形卷积换成不是残差的分�
 特色无人机实验
 工程学术研讨会
 
-
-
 docker run --shm-size=16g --gpus all -d --name deep_au_test  deep_au:v1
-
-
 
 echo "export PYTHONPATH=\$PYTHONPATH:/home/code/radio_map_construction" >> ~/.bashrc
 source ~/.bashrc
@@ -257,7 +138,6 @@ python3 /home/code/radio_map_construction/train/model_train_multiscale_v8.py
 echo "export PYTHONPATH=\$PYTHONPATH:/home/code/radioMap" >> ~/.bashrc
 source ~/.bashrc
 python3 /home/code/radioMap/train/Unet_BTM_train.py
-
 
 # 出现的问题
 加入傅里叶损失和小波损失
@@ -282,4 +162,7 @@ python3 /home/code/radioMap/train/Unet_BTM_train.py
 算法后处理部分可以加一个修正模块进行高频部分的修正
 1、看是否有哪些高频注意力机制可以使用
 
-
+# flowmatching model 
+条件训练的代码需要写一个if else
+采样过程需要将求解算法和速度预测分开
+需要将DDPM扩散过程进行对象化

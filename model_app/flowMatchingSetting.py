@@ -1,61 +1,11 @@
 import torch
 import shutil
 import os
-from model_app.flowMatchingApp import train, eval
+from model_app.flowMatchingApp import flowMatching_app
 from torch.utils.tensorboard import SummaryWriter
 from data.lib.loaders import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.flow_matching_dir.volecity_predict import velocity_UNet
-
-
-
-
-def main(model_config=None):
-    modelConfig = {
-        "state": "train", # or eval
-        "device": "cuda:0",
-        # 训练到70轮之后开始调用余弦学习率调度器
-        "epoch": 1000,
-        "batch_size": 32,
-        "T": 100,
-
-        "UNet_input_shape":[5, 256, 256],
-        "UNet_output_shape":[1, 256, 256],
-        "C_down_list": [64, 128, 256, 512],
-        "C_list_attn": [64, 64, 128, 128, 128],
-
-        "w": 2,
-
-        "dropout": 0.15,
-        "lr": 1e-3,
-        "multiplier": 2.5,
-        "beta_1": 1e-4,
-        "beta_T": 0.03,
-
-        "img_H":256,
-        "img_W":256,
-
-        "grad_clip": 2.,
-
-        "log_dir":"../runs/model_log/FLOW_v1_log/",
-
-
-        "save_dir": "../runs/model_pth/FLOW_v1_pth/",
-        "training_load_weight": "ckpt_370_.pt",
-        "test_load_weight": "ckpt_998_.pt",
-        "sampled_dir": "../runs/flow_model/SampledImgs/",
-
-        "sampledNoisyImgName": "NoisyGuidenceImgs.png",
-        "sampledImgName": "SampledGuidenceImgs.png",
-        "originalImgName": "OriginalImgs.png",
-        "nrow": 8
-    }
-    if model_config is not None:
-        modelConfig = model_config
-    if modelConfig["state"] == "train":
-        train(modelConfig)
-    else:
-        eval(modelConfig)
 
 
 if __name__ == '__main__':
@@ -70,15 +20,16 @@ if __name__ == '__main__':
         "numTx": 80,  # 信源数量设定
         "thresh": 0.05,  # 环境噪声
         "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
-        "carsSimul": "no",  # 是否开启小车作为仿真
-        "carsInput": "no",  # 是否将小车图作为模型输入
+        "carsSimul": "yes",  # 是否开启小车作为仿真
+        "carsInput": "yes",  # 是否将小车图作为模型输入
         "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
         "cityMap": "complete",  # 是否输入完全的城市地图
         "missing": 1,  # 地图缺失号码
         "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
         "num_samples_low": 10,  # 最低采样数
         "num_samples_high": 300,  # 最高采样数
-        "inter_flag":True # 看是否需要插值图像
+        "inter_flag":True, # 看是否需要插值图像
+        "scale256_flag": False# 取值范围是否为0 - 255
     }
     # 加载数据集
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
@@ -100,14 +51,14 @@ if __name__ == '__main__':
 
 #   模型定义参数类
     if simuSetDict["carsInput"] !="no":
-        UNet_BTM_input_shape = [5, 256, 256]
+        UNet_BTM_input_shape = [6, 256, 256]
     else:
-        UNet_BTM_input_shape = [4, 256, 256]
+        UNet_BTM_input_shape = [5, 256, 256]
     UNet_BTM_output_shape = [1, 256, 256]
     C_down_list =  [32, 64, 128, 256]
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
     attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-
+    T = 100
     #   定义训练过程数据保存地址
     log_dir = r'/home/code/radio_map_construction/runs/model_log/MS_no_cars256/'# log 存储位置
     model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型加载目录
@@ -120,16 +71,16 @@ if __name__ == '__main__':
     writer = SummaryWriter(log_dir=log_dir)
 
 
-    model = velocity_UNet(T = 100,                                           # 流匹配的迭代总轮次
+    model = velocity_UNet(T = T,                                           # 流匹配的迭代总轮次
                            input_shape = UNet_BTM_input_shape,                   # 网络输入形状
                            output_shape = UNet_BTM_output_shape,                 # 网络输出形状
                            C_down_list = C_down_list,                            # Unet网络通道设置列表
                            attn_params = attn_params).to(device)                 # 掩码网络通道设置列表
 
 
-    if load_checkpoint is not None:
-        model.load_state_dict(torch.load(os.path.join(model_load_dir,load_checkpoint),map_location=device), strict=False)
-        print(load_checkpoint+"Model weight load down.")
-
-
+    total_epoch = 300
+    start_epoch = 0
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01/"
+    app = flowMatching_app(start_epoch,model_save_dir,model_load_dir,writer,device,T)
+    app.train(model, train_loader, val_loader,val_dir, total_epoch)
 
