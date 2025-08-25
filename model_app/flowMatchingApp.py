@@ -266,57 +266,7 @@ class flowMatching_app():
 
         model.to(self.device)
 
-        for e in range(self.start_epoch, total_epoch):
-            running_loss = 0.0
-
-            with tqdm(train_loader, dynamic_ncols=True) as tqdmDataLoader:
-                for inputs, targets in tqdmDataLoader:
-                    optimizer.zero_grad()
-
-                    x_0 = inputs[:, 3, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
-                    x_1 = targets.to(self.device)
-                    condition_info = inputs.to(self.device)
-                    t = torch.rand(x_1.shape[0]).to(self.device)
-
-                    path_sample = path.sample(t=t, x_0=x_0, x_1=x_1)
-
-                    if np.random.rand() < 0.1:
-                        condition_info = torch.zeros_like(condition_info).to(self.device)
-
-                    pred = model(path_sample.x_t, path_sample.t, condition_info)
-                    loss = criterion(pred, path_sample.dx_t)
-                    loss.backward()
-
-                    # 这块还有一个超参数 下面是对梯度的向量长度进行截断
-                    # 不改变梯度方向 但是将高于2 长度的向量全部变成向量长度为2 从而保证整体训练不会发散
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
-                    optimizer.step()
-                    running_loss += loss.item()
-                    # 更新一下进度条显示信息
-                    tqdmDataLoader.set_postfix(ordered_dict={
-                        "epoch": e,
-                        "loss: ": loss.item(),
-                        "img shape: ": x_1.shape,
-                        "LR": optimizer.state_dict()['param_groups'][0]["lr"]
-                    })
-
-            # 更新调度器
-            warmUpScheduler.step()
-            avg_loss = running_loss / len(tqdmDataLoader)
-            self.board_writer.add_scalar('Loss/train', avg_loss, e)
-            # 定期保存检查点，包括模型、优化器和调度器状态
-            if (e + 1) % save_interval == 0:
-                checkpoint = {
-                    'epoch': e + 1,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': warmUpScheduler.state_dict(),
-                }
-                torch.save(checkpoint, os.path.join(self.model_save_dir, f"checkpoint_epoch_{e + 1}.pth"))
-                print(f"已保存检查点: checkpoint_epoch_{e + 1}.pth")
-            if (e + 1) % val_interval == 0:
-                self.val(self, model, val_loader, val_dir)
-        self.board_writer.close()
+        self.val(model, val_loader, val_dir)
 
     def test(self,model, load_epoch, test_loader, test_dir):
         # 重新创建 test_dir

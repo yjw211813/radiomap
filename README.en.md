@@ -172,3 +172,6 @@ flowmatching setting
 flowmatching APP.py  volecity_predict.py
 ---------------------------
 scheduler.py
+
+
+set PYTHONPATH=C:\Users\Administrator\Desktop\notebook\second_paper\radio_map_construction

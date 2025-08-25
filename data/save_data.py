@@ -11,19 +11,20 @@ simuSetDict = {
     "dir_dataset": r"C:\Users\Administrator\Desktop\bin\pystft\RadioMapSeer/",  # 数据集文件夹
     "numTx": 80,  # 信源数量设定
     "thresh": 0.05,  # 环境噪声
-    "simulation": "rand",  # 模拟类型
+    "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
     "carsSimul": "yes",  # 是否开启小车作为仿真
     "carsInput": "yes",  # 是否将小车图作为模型输入
-    "IRT2maxW": 0.3,  # IRT2的最大加权值
+    "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
     "cityMap": "complete",  # 是否输入完全的城市地图
     "missing": 1,  # 地图缺失号码
-    "fix_samples": 300,  # 采样数量
+    "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
     "num_samples_low": 10,  # 最低采样数
     "num_samples_high": 300,  # 最高采样数
-    "inter_flag": True  # 看是否需要插值图像
+    "inter_flag": True,  # 看是否需要插值图像
+    "scale256_flag": False  # 取值范围是否为0 - 255
 }
 
-def save_datasets_to_hdf5(simuSetDict, hdf5_path, train_batch_size=64, test_batch_size=64, num_workers=12):
+def save_datasets_to_hdf5(simuSetDict, hdf5_path, train_batch_size=64, test_batch_size=64, num_workers=8):
     datasets = {
         'train': RadioMapSeerLoader(simuSetDict, phase="train"),
         'val': RadioMapSeerLoader(simuSetDict, phase="val"),
@@ -33,7 +34,7 @@ def save_datasets_to_hdf5(simuSetDict, hdf5_path, train_batch_size=64, test_batc
     with h5py.File(hdf5_path, 'w') as hf:
         hf.attrs['description'] = "RadioMapSeer Dataset"
         hf.attrs['version'] = "1.0"
-        hf.attrs['author'] = "Your Name"
+        hf.attrs['author'] = "liao zheng yan"
 
         phase_names = ['train', 'val', 'test']
         for phase in tqdm(phase_names, desc="Processing datasets"):
@@ -103,8 +104,8 @@ def save_datasets_to_hdf5(simuSetDict, hdf5_path, train_batch_size=64, test_batc
 if __name__ == "__main__":
     save_datasets_to_hdf5(
         simuSetDict,
-        hdf5_path=r"C:\Users\Administrator\Desktop\bin\pystft/radiomap_data.h5",
+        hdf5_path=r"C:\Users\Administrator\Desktop\bin\pystft/radiomap_data1.h5",
         train_batch_size=64,
         test_batch_size=64,
-        num_workers=12
+        num_workers=8
     )

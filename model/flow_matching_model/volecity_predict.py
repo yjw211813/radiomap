@@ -130,31 +130,7 @@ def ConditionalEmbedding_test():
     print(f"Output shape: {output.shape}")
 
 
-# # 下采样和上采样可以进行平替
-# # 上下采样可以进行更改
-class DownSample(nn.Module):
-    def __init__(self, in_ch):
-        super().__init__()
-        self.c1 = nn.Conv2d(in_ch, in_ch, 3, stride=2, padding=1)
-        self.c2 = nn.Conv2d(in_ch, in_ch, 5, stride=2, padding=2)
 
-    def forward(self, x, temb, cemb):
-        x = self.c1(x) + self.c2(x)
-        return x
-
-
-# 上下采样可以进行更改
-class UpSample(nn.Module):
-    def __init__(self, in_ch):
-        super().__init__()
-        self.c = nn.Conv2d(in_ch, in_ch, 3, stride=1, padding=1)
-        self.t = nn.ConvTranspose2d(in_ch, in_ch, 5, 2, 2, 1)
-
-    def forward(self, x, temb, cemb):
-        _, _, H, W = x.shape
-        x = self.t(x)
-        x = self.c(x)
-        return x
 
 
 class velocity_UNet(nn.Module):
@@ -286,15 +262,6 @@ if __name__ == '__main__':
     # test_TimeEmbedding()
     # ConditionalEmbedding_test()
     velocity_UNet_test()
-
-
-
-
-
-
-
-
-
 
 
 
