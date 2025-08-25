@@ -78,7 +78,7 @@ if __name__ == '__main__':
 
 
     total_epoch = 300
-    start_epoch = 0
+    start_epoch = 2
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01/"
     app = flowMatching_app(start_epoch = start_epoch,
                            model_save_dir = model_save_dir,

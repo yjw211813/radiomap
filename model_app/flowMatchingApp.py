@@ -257,7 +257,7 @@ class flowMatching_app():
         # 如果提供了检查点路径，加载优化器和调度器状态
         if self.start_epoch != 0:
             checkpoint_path = os.path.join(self.model_save_dir, f"checkpoint_epoch_{self.start_epoch}.pth")
-            checkpoint = torch.load(checkpoint_path, weights_only=True)
+            checkpoint = torch.load(checkpoint_path)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             warmUpScheduler.load_state_dict(checkpoint['scheduler_state_dict'])
