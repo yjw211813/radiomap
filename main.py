@@ -4,12 +4,22 @@ from data.lib.loaders import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.sigle_Unet.Unet_BTM import Unet_BTM
 import os
+from data.radioSeerRead import create_dataloaders
 
 if __name__ == '__main__':
     device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
-    train_batch_size = 50  # 批次大小
-    val_batch_size = 50
+    train_batch_size = 40  # 批次大小
+    val_batch_size = 40
     test_batch_size = 8  # 批次大小
+    # h5_path = r"/home/data/path_loss_data/RadioSeer/radiomap_data.h5"
+    # dataloaders = create_dataloaders(
+    #     h5_path=h5_path,
+    #     train_batch_size=train_batch_size,
+    #     val_batch_size=val_batch_size,
+    #     test_batch_size=test_batch_size,
+    #     num_workers=4
+    # )
+    
     simuSetDict = {
         "ind1": 0,  # 起始索引
         "ind2": 0,  # 末尾索引
@@ -17,15 +27,16 @@ if __name__ == '__main__':
         "numTx": 80,  # 信源数量设定
         "thresh": 0.05,  # 环境噪声
         "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
-        "carsSimul": "no",  # 是否开启小车作为仿真
-        "carsInput": "no",  # 是否将小车图作为模型输入
+        "carsSimul": "yes",  # 是否开启小车作为仿真
+        "carsInput": "yes",  # 是否将小车图作为模型输入
         "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
         "cityMap": "complete",  # 是否输入完全的城市地图
         "missing": 1,  # 地图缺失号码
         "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
         "num_samples_low": 10,  # 最低采样数
         "num_samples_high": 300,  # 最高采样数
-        "inter_flag":True # 看是否需要插值图像
+        "inter_flag":True, # 看是否需要插值图像
+        "scale256_flag": False  # 取值范围是否为0 - 255
     }
     # 加载数据集
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
@@ -46,14 +57,11 @@ if __name__ == '__main__':
     model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型存储位置
 
     os.makedirs(model_save_dir, exist_ok=True)
-    # 训练标识
-    print("inter_flag:",simuSetDict["inter_flag"])
+
     print("MS_no_cars256")
     # 定义模型
-    if simuSetDict["carsInput"] !="no":
-        BTM_ghost_UNet_input_shape = [5, 256, 256]
-    else:
-        BTM_ghost_UNet_input_shape = [4, 256, 256]
+
+    BTM_ghost_UNet_input_shape = [5, 256, 256]
     BTM_ghost_UNet_output_shape = [1, 256, 256]
     C_down_list =  [32, 64, 128, 256]
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
@@ -64,7 +72,8 @@ if __name__ == '__main__':
     warmup_epochs = 4
     total_epoch = 80
     start_epoch = 0
+
     app = Unet_BTM_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
-    load_epoch = 38
+    load_epoch = 0
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/MS_no_cars256/"
-    app.test( model, load_epoch, test_loader, val_dir)
+    app.train(model, train_loader, val_loader, total_epoch)

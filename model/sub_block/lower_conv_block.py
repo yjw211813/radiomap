@@ -168,44 +168,44 @@ def ConvTranspose_test():
     output = conv_transpose(x)
     print("Output shape:", output.shape)
 
-
-class multiScaleUpSample(nn.Module):
+class MultiScaleUpSample(nn.Module):
     def __init__(self, in_ch, kernel_list):
-        super(multiScaleUpSample,self).__init__()
-        # 转置卷积部分，使用第一个核大小
-        self.t = nn.ConvTranspose2d(in_ch, in_ch, kernel_list[0], stride=2,
-                                    padding=kernel_list[0] // 2, output_padding=1)
-
-        # 创建卷积层列表
-        self.conv_list = nn.ModuleList()
-        for k in kernel_list:
-            self.conv_list.append(
-                nn.Conv2d(in_ch, in_ch, k, stride=1, padding=k // 2)
+        super(MultiScaleUpSample, self).__init__()
+        # Initialize ModuleList for transposed convolutions
+        self.t_ups = nn.ModuleList()
+        for kernel_size in kernel_list:
+            self.t_ups.append(
+                nn.ConvTranspose2d(
+                    in_ch,
+                    in_ch// 2,
+                    kernel_size,
+                    stride=2,
+                    padding=kernel_size // 2,
+                    output_padding=1
+                )
             )
+        # Single convolution layer after combining outputs
+        self.conv = nn.Conv2d(in_ch// 2, in_ch// 2, 3, stride=1, padding=1)
 
     def forward(self, x, temb=None, cemb=None):
-        # 上采样
-        x = self.t(x)
-
-        # 应用所有卷积并相加
         out = None
-        for conv in self.conv_list:
+        for t_up in self.t_ups:
             if out is None:
-                out = conv(x)
+                out = t_up(x)
             else:
-                out += conv(x)
-
+                out += t_up(x)
+        out = self.conv(out)
         return out
 
 
 def multiScaleUpSample_test():
     input_tensor = torch.randn(16, 16, 64, 64)
     kernel_list = [3, 5, 7]
-    up_sample = multiScaleUpSample(16, kernel_list)
+    up_sample = MultiScaleUpSample(16, kernel_list)
     output_tensor = up_sample(input_tensor)
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output_tensor.shape}")
-    print(f"Number of convolutional layers: {len(up_sample.conv_list)}")
+
 
 
 if __name__ == "__main__":
