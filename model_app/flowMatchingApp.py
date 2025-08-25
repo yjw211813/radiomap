@@ -186,23 +186,22 @@ class flowMatching_app():
                     batch_size = inputs.size(0)
                     total_samples += batch_size
 
-                    # 计算MSE
-                    mse_batch = nn.MSELoss()(final_solution, targets)
-                    total_mse += mse_batch.item() * batch_size
+                    # 计算MSE（整个batch的平均）
+                    criterion = nn.MSELoss()
+                    mse_batch = criterion(final_solution, targets)
+                    total_mse += mse_batch.item() * batch_size  # 累加总MSE（未平均）
 
                     # 计算NMSE所需的分母（目标向量的能量）
-                    energy_batch = nn.MSELoss()(targets, torch.zeros_like(targets))
-                    total_energy += energy_batch.item() * batch_size
+                    energy_batch = criterion(targets, torch.zeros_like(targets))
+                    total_energy += energy_batch.item() * batch_size  # 累加总能量
 
-                    # 计算SSIM（逐样本计算然后平均）
-                    for i in range(batch_size):
-                        ssim_val = ssim(final_solution[i], targets[i])
-                        total_ssim += ssim_val
+                    # 计算SSIM（整个batch的平均）
+                    ssim_batch = ssim(final_solution, targets)
+                    total_ssim += ssim_batch.item() * batch_size
 
-                    # 计算PSNR（逐样本计算然后平均）
-                    for i in range(batch_size):
-                        psnr_val = psnr(final_solution[i], targets[i])
-                        total_psnr += psnr_val
+                    # 计算PSNR（整个batch的平均）
+                    psnr_batch = psnr(final_solution, targets)
+                    total_psnr += psnr_batch.item() * batch_size
 
                     # 只对第一个批次进行可视化
                     if batch_idx == 0:
@@ -317,23 +316,22 @@ class flowMatching_app():
                     batch_size = inputs.size(0)
                     total_samples += batch_size
 
-                    # 计算MSE
-                    mse_batch = nn.MSELoss()(final_solution, targets)
-                    total_mse += mse_batch.item() * batch_size
+                    # 计算MSE（整个batch的平均）
+                    criterion = nn.MSELoss()
+                    mse_batch = criterion(final_solution, targets)
+                    total_mse += mse_batch.item() * batch_size  # 累加总MSE（未平均）
 
                     # 计算NMSE所需的分母（目标向量的能量）
-                    energy_batch = nn.MSELoss()(targets, torch.zeros_like(targets))
-                    total_energy += energy_batch.item() * batch_size
+                    energy_batch = criterion(targets, torch.zeros_like(targets))
+                    total_energy += energy_batch.item() * batch_size  # 累加总能量
 
-                    # 计算SSIM（逐样本计算然后平均）
-                    for i in range(batch_size):
-                        ssim_val = ssim(final_solution[i], targets[i])
-                        total_ssim += ssim_val
+                    # 计算SSIM（整个batch的平均）
+                    ssim_batch = ssim(final_solution, targets)
+                    total_ssim += ssim_batch.item() * batch_size
 
-                    # 计算PSNR（逐样本计算然后平均）
-                    for i in range(batch_size):
-                        psnr_val = psnr(final_solution[i], targets[i])
-                        total_psnr += psnr_val
+                    # 计算PSNR（整个batch的平均）
+                    psnr_batch = psnr(final_solution, targets)
+                    total_psnr += psnr_batch.item() * batch_size
 
                     # 只对第一个批次进行可视化
                     if batch_idx == 0:
