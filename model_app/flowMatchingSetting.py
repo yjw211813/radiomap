@@ -9,7 +9,7 @@ from model.flow_matching_model.volecity_predict import velocity_UNet
 from data.radioSeerRead import create_dataloaders
 
 if __name__ == '__main__':
-    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     train_batch_size = 32  # 批次大小
     val_batch_size = 32
     test_batch_size = 8  # 批次大小
@@ -59,10 +59,9 @@ if __name__ == '__main__':
     attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
     T = 100
     #   定义训练过程数据保存地址
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching01/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01/"# 模型加载目录
-    load_checkpoint= "ckpt_370_.pt"
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching01_resConv/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01_resConv/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01_resConv/"# 模型存储位置
     if os.path.exists(log_dir):
         shutil.rmtree(log_dir)  # 删除上一次训练过程数据
     os.makedirs(log_dir, exist_ok=True)
@@ -78,8 +77,9 @@ if __name__ == '__main__':
 
 
     total_epoch = 300
-    start_epoch = 2
-    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01/"
+    start_epoch = 0
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01_resConv/"
+    print(val_dir)
     app = flowMatching_app(start_epoch = start_epoch,
                            model_save_dir = model_save_dir,
                            model_load_dir = model_load_dir,

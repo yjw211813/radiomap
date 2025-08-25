@@ -295,8 +295,6 @@ class flowMatching_app():
                     tqdmDataLoader.set_postfix(ordered_dict={
                         "epoch": e,
                         "loss: ": loss.item(),
-                        "img shape: ": x_1.shape,
-                        "LR": optimizer.state_dict()['param_groups'][0]["lr"]
                     })
 
             # 更新调度器

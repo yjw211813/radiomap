@@ -4,9 +4,15 @@ import torch
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as F
-from model.sub_block.conv2D_block import Fractal_multi_scale2D,multi_scale_block2D
-from model.sub_block.lower_conv_block import multiScaleConvDown,MultiScaleUpSample
+from model.sub_block.conv2D_block import *
 
+# def drop_connect(x, drop_ratio):
+#     keep_ratio = 1.0 - drop_ratio
+#     mask = torch.empty([x.shape[0], 1, 1, 1], dtype=x.dtype, device=x.device)
+#     mask.bernoulli_(p=keep_ratio)
+#     x.div_(keep_ratio  )# 4. 缩放输入以保持期望值不变
+#     x.mul_(mask  )# 5. 应用掩码 - 随机将整个特征图置零
+#     return x
 
 class Swish(nn.Module):
     def forward(self, x):
@@ -66,7 +72,6 @@ class TimeEmbedding(nn.Module):
 
 # 测试函数
 def test_TimeEmbedding():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     T = 1000
     d_model = 128
     img_H, img_W = 64, 64
@@ -74,9 +79,9 @@ def test_TimeEmbedding():
 
     # 创建连续时间嵌入模块
     time_embedding = TimeEmbedding(T,d_model, img_H, img_W)
-    time_embedding.to(device)
+
     # 生成连续时间输入 (范围[0,1])
-    t = torch.rand(batch_size).to(device) # 连续时间
+    t = torch.rand(batch_size)  # 连续时间
 
     # 前向传播
     output = time_embedding(t)
@@ -103,10 +108,9 @@ class ConditionalEmbedding(nn.Module):
         C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
         # 构建编码器
         layers = []
-
-        layers.append(multi_scale_block2D(C_in=self.input_channel, C_out=C_list[0], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
+        layers.append(Res_Inception_ghost2D(C_in=self.input_channel, C_out=C_list[0], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
         for i in range(len(C_list) - 1):
-            layers.append(multi_scale_block2D(C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
+            layers.append(Res_Inception_ghost2D(C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
         self.encoder = nn.Sequential(*layers)
         self.gelu = nn.GELU()
 
@@ -166,20 +170,18 @@ class velocity_UNet(nn.Module):
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
         kernel_sizes = [3, 5, 7, 9]
-        convDownKernel_list = [3, 5, 7]
-        convUpKernel_list = [3, 5, 7]
         # 创建下采样路径（编码器）
         self.encoder = nn.ModuleList()
         in_ch = self.input_channel
         for out_ch in C_down_list:
             self.encoder.append(nn.Sequential(
-                multi_scale_block2D(C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_num=2),
-                multiScaleConvDown(out_ch,convDownKernel_list)
+                Res_Inception_ghost2D(C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_num=2),
+                Conv_DownSampling2D(out_ch)
             ))
             in_ch = out_ch
 
         # 中心卷积层
-        self.conv_center = Fractal_multi_scale2D(input_channel=C_down_list[-1],output_channel=C_down_list[-1])
+        self.conv_center = Res_Fractal_inception2D(input_channel=C_down_list[-1],output_channel=C_down_list[-1])
 
         # 创建上采样路径（解码器）
         self.decodes = nn.ModuleList()
@@ -187,8 +189,8 @@ class velocity_UNet(nn.Module):
             i = i -1
             self.decodes.append(
                 nn.Sequential(
-                    multi_scale_block2D(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes,dilated_num=1),
-                    MultiScaleUpSample(C_down_list[i],convUpKernel_list)
+                    Res_Inception_ghost2D(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes,dilated_num=1),
+                    ConvTranspose_UpSam(C_down_list[i])
                 )
             )
         # 创建注意力模块
@@ -242,7 +244,7 @@ class velocity_UNet(nn.Module):
             # 上采样卷积
             x = self.decodes[i](x)
             # 应用注意力机制
-            x = x + attn_outputs[i] + time_outputs[i]
+            x = (x + attn_outputs[i])*time_outputs[i]
             # 跳跃连接（拼接编码器特征）
             skip_idx = len(encoder_outs) - 2 - i
             if skip_idx >= 0:
@@ -259,7 +261,7 @@ class velocity_UNet(nn.Module):
 
 
 def velocity_UNet_test():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
     print(device)
     batch_size = 8
     T = 1000
@@ -280,26 +282,11 @@ def velocity_UNet_test():
 
 
 if __name__ == '__main__':
-    # test_TimeEmbedding()
-    # ConditionalEmbedding_test()
-    velocity_UNet_test()
-
-
-
-
-
-
-
-
-
-
-
-
     # ConditionalEmbedding_test()
     # noise_UNet_test()
     # TEmbeding_block()
     # test_TimeEmbedding()
-    # velocity_UNet_test()
+    velocity_UNet_test()
     #
     # #注意力模块
     #
