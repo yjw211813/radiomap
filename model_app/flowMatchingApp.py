@@ -312,7 +312,7 @@ class flowMatching_app():
                 torch.save(checkpoint, os.path.join(self.model_save_dir, f"checkpoint_epoch_{e + 1}.pth"))
                 print(f"已保存检查点: checkpoint_epoch_{e + 1}.pth")
             if (e + 1) % val_interval == 0:
-                self.val(self, model, val_loader, val_dir)
+                self.val( model, val_loader, val_dir)
         self.board_writer.close()
 
     def test(self,model, load_epoch, test_loader, test_dir):

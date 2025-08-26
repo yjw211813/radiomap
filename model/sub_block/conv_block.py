@@ -3,14 +3,32 @@ import torch.nn as nn
 import math
 from torch.nn import functional as F
 
+
 class GhostConv2D(nn.Module):
-    def __init__(self, inp, oup,depth_wise_size,dilated_num , channel_kernel_size=1, ratio=2, stride=1, relu=True):
+    def __init__(self, inp, oup, depth_wise_size, dilated_num, channel_kernel_size=1, ratio=3.5, stride=1, relu=True):
         super(GhostConv2D, self).__init__()
         self.oup = oup
         init_channels = math.ceil(oup / ratio)
-        new_channels = init_channels * (ratio - 1)
+
+        # 确保 new_channels 是 init_channels 的整数倍
+        # 计算最接近的整数倍
+        new_channels_float = init_channels * (ratio - 1)
+        multiple = round(new_channels_float / init_channels)
+        new_channels = init_channels * multiple
+
+        # 确保总通道数至少为 oup
+        total_channels = init_channels + new_channels
+        if total_channels < oup:
+            # 增加倍数以满足要求
+            multiple += math.ceil((oup - total_channels) / init_channels)
+            # 确保 new_channels 是 init_channels 的整数倍
+            new_channels = init_channels * multiple
+
+
         self.primary_conv = nn.Sequential(
-            nn.Conv2d(in_channels = inp, out_channels = init_channels, kernel_size = channel_kernel_size,stride = stride,padding = channel_kernel_size//2, bias=False),
+            nn.Conv2d(in_channels=inp, out_channels=init_channels,
+                      kernel_size=channel_kernel_size, stride=stride,
+                      padding=channel_kernel_size // 2, bias=False),
             nn.BatchNorm2d(init_channels),
             nn.ReLU(inplace=True) if relu else nn.Sequential(),
         )
@@ -19,28 +37,60 @@ class GhostConv2D(nn.Module):
         dilated_kernel_size = (depth_wise_size - 1) * dilated_num + 1
         # 计算padding，确保输出宽度与输入宽度相同
         padding_width = (dilated_kernel_size - 1) // 2
-        self.cheap_operation = nn.Sequential(
-            nn.Conv2d(init_channels, new_channels, kernel_size=depth_wise_size, stride=(1, 1),
-                      dilation=dilated_num, padding=padding_width, groups=init_channels, bias=False),
-            nn.BatchNorm2d(new_channels),
-            nn.ReLU(inplace=True) if relu else nn.Sequential(),
-        )
+
+        # 只有在 new_channels > 0 时才创建廉价操作
+        if new_channels > 0:
+            self.cheap_operation = nn.Sequential(
+                nn.Conv2d(init_channels, new_channels, kernel_size=depth_wise_size,
+                          stride=(1, 1), dilation=dilated_num, padding=padding_width,
+                          groups=init_channels, bias=False),
+                nn.BatchNorm2d(new_channels),
+                nn.ReLU(inplace=True) if relu else nn.Sequential(),
+            )
+        else:
+            self.cheap_operation = None
 
     def forward(self, x):
         x1 = self.primary_conv(x)
-        x2 = self.cheap_operation(x1)
-        out = torch.cat([x1, x2], dim=1)
+
+        if self.cheap_operation is not None:
+            x2 = self.cheap_operation(x1)
+            out = torch.cat([x1, x2], dim=1)
+        else:
+            out = x1
+
         return out[:, :self.oup, :, :]
 
+
 def GhostConv2D_test():
-    input_tensor = torch.randn(10, 2, 128, 128)
-    # 创建 GhostModule 实例
-    ghost_module = GhostConv2D(inp=2, oup=32,depth_wise_size=3,dilated_num=1 )
-    # 进行前向传播
-    output_tensor = ghost_module(input_tensor)
-    # 打印输出形状
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
+    # 测试修正后的代码
+    ghost_module = GhostConv2D(inp=2, oup=32, depth_wise_size=3, dilated_num=1)
+    print("GhostConv2D 创建成功")
+
+    # 测试前向传播
+    x = torch.randn(1, 2, 64, 64)
+    output = ghost_module(x)
+    print(f"输入形状: {x.shape}")
+    print(f"输出形状: {output.shape}")
+
+    # 测试不同参数组合
+    test_cases = [
+        (3, 64, 5, 2),
+        (1, 16, 3, 1),
+        (4, 128, 7, 3),
+    ]
+
+    for inp, oup, kernel, dilation in test_cases:
+        try:
+            module = GhostConv2D(inp, oup, kernel, dilation)
+            test_input = torch.randn(1, inp, 32, 32)
+            test_output = module(test_input)
+            print(f"测试通过: inp={inp}, oup={oup}, kernel={kernel}, dilation={dilation}")
+            print(f"  输入形状: {test_input.shape}, 输出形状: {test_output.shape}")
+        except Exception as e:
+            print(f"测试失败: inp={inp}, oup={oup}, kernel={kernel}, dilation={dilation}")
+            print(f"  错误信息: {e}")
+
 
 
 class PatchEmbedding2D(nn.Module):
@@ -76,4 +126,5 @@ def PatchEmbedding_test():
 
 if __name__ == '__main__':
     # GhostConv2D_test()
-    PatchEmbedding_test()
+    # PatchEmbedding_test()
+    GhostConv2D_test()

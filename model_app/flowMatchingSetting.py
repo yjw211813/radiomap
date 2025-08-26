@@ -9,7 +9,7 @@ from model.flow_matching_model.volecity_predict import velocity_UNet
 from data.radioSeerRead import create_dataloaders
 
 if __name__ == '__main__':
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     train_batch_size = 32  # 批次大小
     val_batch_size = 32
     test_batch_size = 8  # 批次大小
@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
 
     total_epoch = 300
-    start_epoch = 0
+    start_epoch = 10
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01_resConv/"
     print(val_dir)
     app = flowMatching_app(start_epoch = start_epoch,
