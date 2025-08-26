@@ -59,9 +59,9 @@ if __name__ == '__main__':
     attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
     T = 100
     #   定义训练过程数据保存地址
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching01_resConv/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01_resConv/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01_resConv/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching01/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01/"# 模型存储位置
     if os.path.exists(log_dir):
         shutil.rmtree(log_dir)  # 删除上一次训练过程数据
     os.makedirs(log_dir, exist_ok=True)
@@ -78,7 +78,7 @@ if __name__ == '__main__':
 
     total_epoch = 300
     start_epoch = 10
-    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01_resConv/"
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01/"
     print(val_dir)
     app = flowMatching_app(start_epoch = start_epoch,
                            model_save_dir = model_save_dir,

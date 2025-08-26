@@ -21,7 +21,7 @@ from torch import nn
 
 # Model wrapper class
 class WrappedModel(ModelWrapper):
-    def __init__(self, model, cfg_scale=7.0):
+    def __init__(self, model, cfg_scale=0.5):
         super().__init__(model)
         self.cfg_scale = cfg_scale  # Classifier-Free Guidance scale
 
@@ -38,7 +38,7 @@ class WrappedModel(ModelWrapper):
         # 计算有条件输出
         v_pred_cond = self.model(x, t, condition_info)
         # 应用CFG公式
-        v_pred = v_pred_uncond + self.cfg_scale * (v_pred_cond - v_pred_uncond)
+        v_pred = 0.5 * v_pred_uncond + self.cfg_scale * (v_pred_cond - v_pred_uncond)
         return v_pred
 
 
@@ -67,12 +67,17 @@ class flowMatching_app():
         n_cols = min(5, n_timesteps)  # 每行最多显示5个时间步
         n_rows = int(np.ceil(n_timesteps / n_cols))
 
+        # 创建子图并确保axs总是二维数组
         fig, axs = plt.subplots(n_rows, n_cols, figsize=(20, 4 * n_rows))
         fig.suptitle(f'Time Evolution of Sample {sample_idx}', fontsize=16)
 
-        # 处理单行情况
-        if n_rows == 1:
-            axs = [axs] if n_cols == 1 else axs.reshape(1, -1)
+        # 确保axs始终是二维数组，便于统一处理
+        if n_rows == 1 and n_cols == 1:
+            axs = np.array([[axs]])
+        elif n_rows == 1:
+            axs = axs.reshape(1, -1)
+        elif n_cols == 1:
+            axs = axs.reshape(-1, 1)
 
         # 遍历所有时间步
         for i in range(n_timesteps):
@@ -83,8 +88,8 @@ class flowMatching_app():
             timestep_data = sol[i, sample_idx]
             single_image = timestep_data.squeeze()  # 移除通道维度
 
-            # 显示图像
-            ax = axs[row_idx][col_idx] if n_rows > 1 else axs[col_idx]
+            # 显示图像 - 确保axs[row_idx, col_idx]是Axes对象
+            ax = axs[row_idx, col_idx]
             im = ax.imshow(single_image, cmap='viridis', origin='lower')
             ax.set_title(f't = {T_cpu[i]:.2f}')
             ax.axis('off')
@@ -96,7 +101,7 @@ class flowMatching_app():
         for i in range(n_timesteps, n_rows * n_cols):
             row_idx = i // n_cols
             col_idx = i % n_cols
-            ax = axs[row_idx][col_idx] if n_rows > 1 else axs[col_idx]
+            ax = axs[row_idx, col_idx]
             ax.axis('off')
 
         plt.tight_layout()
@@ -149,7 +154,7 @@ class flowMatching_app():
         wrapped_vf = WrappedModel(model)
         solver = ODESolver(velocity_model=wrapped_vf)
         # 推理过程的步数 这个是总体推理相关设置
-        T = torch.linspace(0, 1,  self.T // 10).to(self.device)
+        T = torch.linspace(0, 1,  self.T // 20).to(self.device)
         # 两步之间的积分间隔 应该是ODE相关设置
         step_size = (T[1] - T[0]) / 10
 
@@ -221,7 +226,8 @@ class flowMatching_app():
 
                         # 3. 显示所有图像
                         plt.show()
-
+                else:
+                    break
         # 计算整个验证集的平均指标
         avg_mse = total_mse / total_samples
         avg_rmse = math.sqrt(avg_mse)
@@ -319,7 +325,7 @@ class flowMatching_app():
         # 重新创建 test_dir
         os.makedirs(test_dir, exist_ok=True)
         checkpoint_path = os.path.join(self.model_load_dir, f"checkpoint_epoch_{load_epoch}.pth")
-        checkpoint = torch.load(checkpoint_path, weights_only=True)
+        checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint['model_state_dict'])
         print("model load weight done.")
         model.eval()
@@ -327,7 +333,7 @@ class flowMatching_app():
         wrapped_vf = WrappedModel(model)
         solver = ODESolver(velocity_model=wrapped_vf)
         # 推理过程的步数 这个是总体推理相关设置
-        T = torch.linspace(0, 1,  self.T // 10).to(self.device)
+        T = torch.linspace(0, 1,  self.T // 20).to(self.device)
         # 两步之间的积分间隔 应该是ODE相关设置
         step_size = (T[1] - T[0]) / 10
 
@@ -399,7 +405,8 @@ class flowMatching_app():
 
                         # 3. 显示所有图像
                         plt.show()
-
+                else:
+                    break
         # 计算整个验证集的平均指标
         avg_mse = total_mse / total_samples
         avg_rmse = math.sqrt(avg_mse)

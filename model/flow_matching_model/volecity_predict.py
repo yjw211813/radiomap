@@ -66,7 +66,7 @@ class TimeEmbedding(nn.Module):
 
 # 测试函数
 def test_TimeEmbedding():
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     T = 1000
     d_model = 128
     img_H, img_W = 64, 64
@@ -118,7 +118,7 @@ class ConditionalEmbedding(nn.Module):
         return out_map
 
 def ConditionalEmbedding_test():
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     batch_size = 8
     input_shape = [4,256,256]
     output_shape = [64,64,64]
@@ -130,46 +130,31 @@ def ConditionalEmbedding_test():
     print(f"Output shape: {output.shape}")
 
 
+# # 下采样和上采样可以进行平替
+# # 上下采样可以进行更改
+class DownSample(nn.Module):
+    def __init__(self, in_ch):
+        super().__init__()
+        self.c1 = nn.Conv2d(in_ch, in_ch, 3, stride=2, padding=1)
+        self.c2 = nn.Conv2d(in_ch, in_ch, 5, stride=2, padding=2)
 
-    # 改写残差模块 从残差模块来引入时间序列和条件
-
-    class ResBlock(nn.Module):
-        def __init__(self, in_ch, out_ch, tdim, dropout, attn=True):
-            super().__init__()
-            self.block1 = nn.Sequential(
-                nn.GroupNorm(32, in_ch),
-                Swish(),
-                nn.Conv2d(in_ch, out_ch, 3, stride=1, padding=1),
-            )
-            self.temb_proj = nn.Sequential(
-                Swish(),
-                nn.Linear(tdim, out_ch),
-            )
-            self.cond_proj = nn.Sequential(
-                Swish(),
-                nn.Linear(tdim, out_ch),
-            )
-            self.block2 = nn.Sequential(
-                nn.GroupNorm(32, out_ch),
-                Swish(),
-                nn.Dropout(dropout),
-                nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1),
-            )
-            if in_ch != out_ch:
-                self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=1, padding=0)
-            else:
-                self.shortcut = nn.Identity()
+    def forward(self, x, temb, cemb):
+        x = self.c1(x) + self.c2(x)
+        return x
 
 
+# 上下采样可以进行更改
+class UpSample(nn.Module):
+    def __init__(self, in_ch):
+        super().__init__()
+        self.c = nn.Conv2d(in_ch, in_ch, 3, stride=1, padding=1)
+        self.t = nn.ConvTranspose2d(in_ch, in_ch, 5, 2, 2, 1)
 
-        def forward(self, x, temb, labels):
-            h = self.block1(x)
-            h += self.temb_proj(temb)[:, :, None, None]
-            h += self.cond_proj(labels)[:, :, None, None]
-            h = self.block2(h)
-
-            h = h + self.shortcut(x)
-            return h
+    def forward(self, x, temb, cemb):
+        _, _, H, W = x.shape
+        x = self.t(x)
+        x = self.c(x)
+        return x
 
 
 class velocity_UNet(nn.Module):
@@ -274,7 +259,7 @@ class velocity_UNet(nn.Module):
 
 
 def velocity_UNet_test():
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)
     batch_size = 8
     T = 1000
@@ -304,8 +289,17 @@ if __name__ == '__main__':
 
 
 
-    # ConditionalEmbedding_test()
 
+
+
+
+
+
+    # ConditionalEmbedding_test()
+    # noise_UNet_test()
+    # TEmbeding_block()
+    # test_TimeEmbedding()
+    # velocity_UNet_test()
     #
     # #注意力模块
     #
