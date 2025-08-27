@@ -21,7 +21,7 @@ from torch import nn
 
 # Model wrapper class
 class WrappedModel(ModelWrapper):
-    def __init__(self, model, cfg_scale=0.5):
+    def __init__(self, model, cfg_scale=1):
         super().__init__(model)
         self.cfg_scale = cfg_scale  # Classifier-Free Guidance scale
 
@@ -32,13 +32,13 @@ class WrappedModel(ModelWrapper):
             return self.model(x, t, condition_info)
         # 使用CFG时，需要计算有条件和无条件的输出
         # 创建零条件信息
-        zero_condition = torch.zeros_like(condition_info)
+        # zero_condition = torch.zeros_like(condition_info)
         # 计算无条件输出
-        v_pred_uncond = self.model(x, t, zero_condition)
+        # v_pred_uncond = self.model(x, t, zero_condition)
         # 计算有条件输出
         v_pred_cond = self.model(x, t, condition_info)
         # 应用CFG公式
-        v_pred = 0.5 * v_pred_uncond + self.cfg_scale * (v_pred_cond - v_pred_uncond)
+        v_pred = v_pred_cond
         return v_pred
 
 
@@ -154,7 +154,7 @@ class flowMatching_app():
         wrapped_vf = WrappedModel(model)
         solver = ODESolver(velocity_model=wrapped_vf)
         # 推理过程的步数 这个是总体推理相关设置
-        T = torch.linspace(0, 1,  self.T // 20).to(self.device)
+        T = torch.linspace(0, 1,  self.T // 10).to(self.device)
         # 两步之间的积分间隔 应该是ODE相关设置
         step_size = (T[1] - T[0]) / 10
 
@@ -245,14 +245,14 @@ class flowMatching_app():
     def train(self, model, train_loader, val_loader,val_dir, total_epoch, save_interval=1,val_interval=10,):
 
         # 定义优化器
-        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-4)
         cosineScheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer,
                                                                T_max=total_epoch,
                                                                eta_min=0,
                                                                last_epoch=-1)
         warmUpScheduler = GradualWarmupScheduler(optimizer=optimizer,
-                                                 multiplier=1.5,               # 热身阶段最终会将学习率提高到初始值的2.5倍   1e-3 * multiplier
-                                                 warm_epoch=total_epoch // 10, # 热身阶段占10%的总epoch
+                                                 multiplier=2.5,               # 热身阶段最终会将学习率提高到初始值的2.5倍   1e-3 * multiplier
+                                                 warm_epoch=total_epoch // 20, # 热身阶段占10%的总epoch
                                                  after_scheduler=cosineScheduler)
         # 定义采样轨迹 仿射概率路径 X_t = α_t * X_1 + σ_t * X_0 ， CondOTScheduler 是一个具体的调度器实现，它定义了线性插值路径
         path = AffineProbPath(scheduler=CondOTScheduler())
@@ -282,12 +282,7 @@ class flowMatching_app():
                     x_1 = targets.to(self.device)
                     condition_info = inputs.to(self.device)
                     t = torch.rand(x_1.shape[0]).to(self.device)
-
                     path_sample = path.sample(t=t, x_0=x_0, x_1=x_1)
-
-                    if np.random.rand() < 0.1:
-                        condition_info = torch.zeros_like(condition_info).to(self.device)
-
                     pred = model(path_sample.x_t, path_sample.t, condition_info)
                     loss = criterion(pred, path_sample.dx_t)
                     loss.backward()
@@ -333,7 +328,7 @@ class flowMatching_app():
         wrapped_vf = WrappedModel(model)
         solver = ODESolver(velocity_model=wrapped_vf)
         # 推理过程的步数 这个是总体推理相关设置
-        T = torch.linspace(0, 1,  self.T // 20).to(self.device)
+        T = torch.linspace(0, 1,  self.T // 10).to(self.device)
         # 两步之间的积分间隔 应该是ODE相关设置
         step_size = (T[1] - T[0]) / 10
 
@@ -396,11 +391,11 @@ class flowMatching_app():
                         sample_idx = 0  # 可以更改为任何有效的索引值（0 到 batch_size-1）
 
                         # 1. 可视化时间序列图像
-                        time_series_path = os.path.join(test_dir, "val_img.png")
+                        time_series_path = os.path.join(test_dir, "test_series_img.png")
                         self.visualize_time_series(sol_np, T_cpu, sample_idx, time_series_path)
 
                         # 2. 显示目标图像 (targets)
-                        target_path = os.path.join(test_dir, "origin_img.png")
+                        target_path = os.path.join(test_dir, "test_origin_img.png")
                         self.visualize_target_image(targets, sample_idx, target_path)
 
                         # 3. 显示所有图像
@@ -419,5 +414,4 @@ class flowMatching_app():
         print(f"RMSE: {avg_rmse:.6f}")
         print(f"SSIM: {avg_ssim:.6f}")
         print(f"PSNR: {avg_psnr:.6f}")
-
 

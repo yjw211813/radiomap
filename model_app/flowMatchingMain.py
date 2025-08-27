@@ -9,10 +9,10 @@ from model.flow_matching_model.volecity_predict import velocity_UNet
 from data.radioSeerRead import create_dataloaders
 
 if __name__ == '__main__':
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    train_batch_size = 32  # 批次大小
-    val_batch_size = 32
-    test_batch_size = 8  # 批次大小
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+    train_batch_size = 16  # 批次大小
+    val_batch_size = 2
+    test_batch_size = 2   # 批次大小
 
     simuSetDict = {
         "ind1": 0,  # 起始索引
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
     # 训练标识
-    print("flowMatching")
+    print("flowMatching_structure_modify")
     #   模型定义参数类
     if simuSetDict["carsInput"] !="no":
         UNet_BTM_input_shape = [6, 256, 256]
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     C_down_list =  [32, 64, 128, 256]
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
     attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-    T = 100
+    T = 50
     #   定义训练过程数据保存地址
     log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching01/'# log 存储位置
     model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01/"# 模型加载目录
@@ -76,8 +76,8 @@ if __name__ == '__main__':
                            attn_params = attn_params).to(device)                 # 掩码网络通道设置列表
 
 
-    total_epoch = 300
-    start_epoch = 10
+    total_epoch = 100
+    start_epoch = 0
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01/"
     print(val_dir)
     app = flowMatching_app(start_epoch = start_epoch,
@@ -86,14 +86,15 @@ if __name__ == '__main__':
                            writer = writer,
                            device = device,
                            T = T)
-    load_epoch = 33
-    test_dir = r"/home/code/radio_map_construction/runs/model_test_log/flow_matching01/"
-    os.makedirs(test_dir, exist_ok=True)
-    checkpoint_path = os.path.join(model_load_dir, f"checkpoint_epoch_{load_epoch}.pth")
-    checkpoint = torch.load(checkpoint_path)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    print("model load weight done.")
-    app.val(model, val_loader, val_dir)
+    app.train(model, train_loader, val_loader,val_dir, total_epoch)
+    # load_epoch = 30
+    # test_dir = r"/home/code/radio_map_construction/runs/model_test_log/flow_matching01/"
+    # os.makedirs(test_dir, exist_ok=True)
+    # checkpoint_path = os.path.join(model_load_dir, f"checkpoint_epoch_{load_epoch}.pth")
+    # checkpoint = torch.load(checkpoint_path)
+    # model.load_state_dict(checkpoint['model_state_dict'])
+    # print("model load weight done.")
+    # app.val(model, val_loader, val_dir)
 
 
 
