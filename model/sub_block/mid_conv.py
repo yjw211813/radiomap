@@ -27,7 +27,7 @@ class Inception_group_cat(nn.Module):
         super(Inception_group_cat, self).__init__()
 
         if C_out % len(kernel_list) != 0:
-            raise ValueError(f"C_out ({C_out}) must be divisible by 4.")
+            raise ValueError(f"C_out ({C_out}) must be divisible by len(kernel_list)")
 
 
         sub_Cout = int(C_out / len(kernel_list))
@@ -65,6 +65,51 @@ def Inception_group_cat_test():
     output_tensor = inception_module(x)
     print(f"Input shape: {x.shape}")
     print(f"Output shape: {output_tensor.shape}")
+
+
+class inception_group_sum(nn.Module):
+    def __init__(self, C_in, C_out,kernel_list,dilated_list,drop_out=0.05):
+        super(inception_group_sum, self).__init__()
+
+
+        self.conv_list = nn.ModuleList()
+        gcd_value = math.gcd(C_in, C_out)
+        for i in range(len(kernel_list)):
+            self.conv_list.append(BasicNormConv(C_in = C_in, 
+                                                C_out = C_out, 
+                                                kernel_size = kernel_list[i], 
+                                                dilation = dilated_list[i],
+                                                dropout_rate = drop_out,
+                                                groups=gcd_value))
+    def forward(self, x):
+        output = None
+        for conv in self.conv_list:
+            if output is None:
+                output = conv(x)
+            else:
+                output += conv(x)
+
+        return output  # 在通道维度上拼接
+
+
+def inception_group_sum_test():
+        # 示例参数
+    batch_size = 10  # 批次大小
+    channels = 4  # 通道数
+    img_H = 128  # 序列长度
+    img_W = 128  # 第三维度长度
+
+    kernel_list = [3,5,7,9,11]  
+    dilation_list = [1,2,4,8,4]
+    C_out = 40
+    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
+
+    inception_module = inception_group_sum(C_in=channels, C_out=C_out, kernel_list=kernel_list, dilated_list=dilation_list)
+    output_tensor = inception_module(x)
+    print(f"Input shape: {x.shape}")
+    print(f"Output shape: {output_tensor.shape}")
+
+
 
 
 class inception_sum(nn.Module):
@@ -114,7 +159,7 @@ class Inception_cat(nn.Module):
         super(Inception_cat, self).__init__()
 
         if C_out % len(kernel_list) != 0:
-            raise ValueError(f"C_out ({C_out}) must be divisible by 4.")
+            raise ValueError(f"C_out ({C_out}) must be divisible by len(kernel_list)")
         
         sub_Cout = int(C_out / len(kernel_list))
 
@@ -157,7 +202,7 @@ class Inception_ghost_cat(nn.Module):
         super(Inception_ghost_cat, self).__init__()
 
         if C_out % len(kernel_list) != 0:
-            raise ValueError(f"C_out ({C_out}) must be divisible by 4.")
+            raise ValueError(f"C_out ({C_out}) must be divisible by len(kernel_list)")
 
         sub_Cout = int(C_out / len(kernel_list))
 
@@ -274,6 +319,7 @@ def res_incep_test():
     # 要测试的模块列表
     inception_modules = [
         Inception_group_cat,
+        inception_group_sum,
         inception_sum,
         inception_ghost_sum,
         Inception_cat,
@@ -283,6 +329,7 @@ def res_incep_test():
     # 模块名称列表（用于输出）
     module_names = [
         "Inception_group_cat",
+        "inception_group_sum",
         "inception_sum",
         "inception_ghost_sum",
         "Inception_cat",
@@ -322,11 +369,13 @@ def res_incep_test():
 
 if __name__ == '__main__':
     Inception_group_cat_test()
+    inception_group_sum_test()
     inception_sum_test()
     inception_ghost_sum_test()
     Inception_cat_test()
     Inception_ghost_cat_test()
     res_incep_test()
+
 
 
 
