@@ -22,20 +22,6 @@ class BasicNormConv(nn.Module):
     def forward(self, x):
         return self.block(x)
 
-def BasicNormConv_test():
-    # 示例参数
-    batch_size = 10  # 批次大小
-    channels = 1  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
-    kernel_size = 3  # 每个patch的大小 会导致最终 输出的维度为(128/4,128/4)
-    dilation = 3  # 膨胀率
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
-    patch_embedder = BasicNormConv(C_in = channels, C_out = 4, kernel_size = kernel_size, dilation = dilation)
-    output = patch_embedder(x)
-    print("Output shape:", output.shape)
-
-
 class BasicGhostConv(nn.Module):
     def __init__(self, inp, oup, dw_kernel, dw_dilated, channel_kernel_size=1, ratio=2):
         super(BasicGhostConv, self).__init__()
@@ -62,11 +48,9 @@ class BasicGhostConv(nn.Module):
     def cal_dwconv_out(self,init_channels, ratio):
         """
         计算输出卷积通道数。
-
         参数：
         - init_channels: 初始化的卷积通道数
         - ratio: 通道扩展的比例
-
         返回：
         - output_channels: 计算后的输出通道数
         """
@@ -97,38 +81,6 @@ class BasicGhostConv(nn.Module):
 
         return out[:, :self.oup, :, :]
 
-
-def BasicGhostConv_test():
-    # 测试修正后的代码
-    ghost_module = BasicGhostConv(inp=2, oup=32, dw_kernel=3, dw_dilated=1)
-    print("GhostConv2D 创建成功")
-
-    # 测试前向传播
-    x = torch.randn(1, 2, 64, 64)
-    output = ghost_module(x)
-    print(f"输入形状: {x.shape}")
-    print(f"输出形状: {output.shape}")
-
-    # 测试不同参数组合
-    test_cases = [
-        (3, 64, 5, 2),
-        (1, 16, 3, 1),
-        (4, 128, 7, 3),
-    ]
-
-    for inp, oup, kernel, dilation in test_cases:
-        try:
-            module = BasicGhostConv(inp, oup, kernel, dilation)
-            test_input = torch.randn(1, inp, 32, 32)
-            test_output = module(test_input)
-            print(f"测试通过: inp={inp}, oup={oup}, kernel={kernel}, dilation={dilation}")
-            print(f"  输入形状: {test_input.shape}, 输出形状: {test_output.shape}")
-        except Exception as e:
-            print(f"测试失败: inp={inp}, oup={oup}, kernel={kernel}, dilation={dilation}")
-            print(f"  错误信息: {e}")
-
-
-
 class GhostConv2D(nn.Module):
 
     def __init__(self, inp, oup, dw_kernel, dw_dilated, channel_kernel_size=1, ratio=2, drop_out=0.05):
@@ -151,21 +103,6 @@ class GhostConv2D(nn.Module):
         return x
 
 
-def GhostConv2D_test():
-    # 示例参数
-    batch_size = 10  # 批次大小
-    channels = 4  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
-    kernel_size = 3  # 每个patch的大小 会导致最终 输出的维度为(128/4,128/4)
-    c_out = 16
-    dilation = 2  # 膨胀率
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
-    patch_embedder = GhostConv2D(inp = channels, oup = c_out, dw_kernel = kernel_size, dw_dilated = dilation)
-    output = patch_embedder(x)
-    print("Output shape:", output.shape)
-
-
 class dw_decompos_conv(nn.Module):
     def __init__(self, inp, oup, dw_kernel, dw_dilated):
         super(dw_decompos_conv, self).__init__()
@@ -175,22 +112,6 @@ class dw_decompos_conv(nn.Module):
     def forward(self, x):
         out = self.dw_conv(self.conv1X1(x))
         return out
-
-def dw_decompos_conv_test():
-    # 示例参数
-    batch_size = 10  # 批次大小
-    channels = 2  # 通道数
-    img_H = 256  # 序列长度
-    img_W = 256  # 第三维度长度
-    dw_kernel = 3  # 每个patch的大小 会导致最终 输出的维度为(128/4,128/4)
-    oup = 16  # 每个patch的嵌入维度 嵌入维度即为 卷积输出通道维度
-    dw_dilated = 2
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
-    conv = dw_decompos_conv(inp=channels, oup=oup, dw_kernel=dw_kernel, dw_dilated=dw_dilated)
-    output = conv(x)
-    print("Input shape:",x.shape)
-    print("Output shape:", output.shape)
-
 
 
 class PatchEmbedding2D(nn.Module):
@@ -205,21 +126,6 @@ class PatchEmbedding2D(nn.Module):
         x = self.conv(x)  # 应用卷积，划分patch
         # 形状变化为 (batch_size, embed_dim, 128, num_patches)
         return x
-
-def PatchEmbedding_test():
-    # 示例参数
-    batch_size = 10  # 批次大小
-    channels = 1  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
-    patch_size = 4  # 每个patch的大小 会导致最终 输出的维度为(128/4,128/4)
-    embed_dim = 16  # 每个patch的嵌入维度 嵌入维度即为 卷积输出通道维度
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
-    patch_embedder = PatchEmbedding2D(in_channels=channels, patch_size=patch_size, C_out=embed_dim)
-    output = patch_embedder(x)
-    print("Input shape:",x.shape)
-    print("Output shape:", output.shape)
-
 
 class PyramidConvCompress(nn.Module):
     def __init__(self,img_size, C_in, down_sample_size):
@@ -252,21 +158,6 @@ class PyramidConvCompress(nn.Module):
             x = layer(x)  # 依次通过每个卷积模块
         return x
 
-def PyramidConvCompress_test():
-    # 示例参数
-    batch_size = 4  # 批次大小
-    channels = 2  # 通道数
-    img_H = 256  # 序列长度
-    img_W = 256  # 第三维度长度
-    img_size = 256
-
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
-    compress = PyramidConvCompress(img_size = img_size, C_in = channels, down_sample_size = 8)
-    output = compress(x)
-    print("Input shape:",x.shape)
-    print("Output shape:", output.shape)
-
-
 class Conv_DownSampling2D(nn.Module):
     def __init__(self, C):
         super(Conv_DownSampling2D, self).__init__()
@@ -279,12 +170,6 @@ class Conv_DownSampling2D(nn.Module):
     def forward(self, x):
         return self.Down(x)
 
-def Conv_Down_test():
-    input_tensor = torch.randn(16, 16, 128, 128)
-    DownSamp_exm = Conv_DownSampling2D(16)
-    output_tensor = DownSamp_exm(input_tensor)
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
 
 class Dila_DownSampling2D(nn.Module):
     def __init__(self, C):
@@ -300,14 +185,6 @@ class Dila_DownSampling2D(nn.Module):
     def forward(self, x):
         return self.Down(x)
 
-def Dila_Down_test():
-    input_tensor = torch.randn(16, 16, 128, 128)
-    DownSamp_exm = Dila_DownSampling2D(16)
-    output_tensor = DownSamp_exm(input_tensor)
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
-
-
 # 定义一个简单的PixelShuffle层   通道除以四
 class PixelShuffle_UpSam(nn.Module):
     # 通道数会除以4
@@ -317,20 +194,6 @@ class PixelShuffle_UpSam(nn.Module):
 
     def forward(self, x):
         return self.pixel_shuffle(x)
-
-def PixelShuffle_test():
-
-    batch_size = 12
-    channels = 4
-    height = 8
-    width = 8
-    upscale_factor = 2
-
-    x = torch.randn(batch_size, channels, height, width)
-    print("Input shape:", x.shape)
-    pixel_shuffle = PixelShuffle_UpSam(upscale_factor=upscale_factor)
-    output = pixel_shuffle(x)
-    print("Output shape:", output.shape)
 
 # 定义一个简单的ConvTranspose2d层
 class ConvTranspose_UpSam(nn.Module):
@@ -342,47 +205,3 @@ class ConvTranspose_UpSam(nn.Module):
     def forward(self, x):
         return self.conv_transpose(x)
 
-def ConvTranspose_test():
-
-    batch_size = 4
-    channels = 16
-    height = 8
-    width = 8
-    x = torch.randn(batch_size, channels, height, width)
-    print("Input shape:", x.shape)
-    conv_transpose = ConvTranspose_UpSam(C=channels)
-    output = conv_transpose(x)
-    print("Output shape:", output.shape)
-
-
-    
-
-
-if __name__ == '__main__':
-    import time
-
-    # 记录开始时间
-    start_time = time.time()
-
-    BasicNormConv_test()
-    BasicGhostConv_test()
-    GhostConv2D_test()
-    dw_decompos_conv_test()
-    PatchEmbedding_test()
-    PyramidConvCompress_test()
-    Conv_Down_test()
-    Dila_Down_test()
-    PixelShuffle_test()
-    ConvTranspose_test()
-
-
-
-
-
-
-    # 记录结束时间
-    end_time = time.time()
-
-    # 计算运行时间
-    execution_time = end_time - start_time
-    print(f"程序运行时间: {execution_time:.5f} 秒")

@@ -31,15 +31,6 @@ class SE_Channel_attan2D(nn.Module):
         # Fscale操作：将得到的权重乘以原来的特征图x
         return x * y.expand_as(x)
 
-def SE_Channel_attan2D_test():
-    # 测试 SE_Block
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    x = torch.randn(2, 32, 128, 128).to(device)  # 假设输入是一个 batch_size 为 2，通道数为 32，8x8 的特征图
-    se_block = SE_Channel_attan2D(inchannel=32).to(device)
-    output = se_block(x)
-    print(output.shape)  # 应输出 (2, 32, 128, 128)
-
-
 # 三入 相加 或者两入相加 得到组合特征
 # 这个应该是有个注意力选择机制在其中的 inception
 class SK_Channel_atten2D(nn.Module):
@@ -98,23 +89,6 @@ class SK_Channel_atten2D(nn.Module):
                 final_output += branch_outputs[i] * weights_split[:, i, :, :, :]
         return final_output
 
-def SK_Channel_atten2D_test():
-    # 测试参数
-    img_size = 256
-    C_in = 4
-    C_out = 8
-    kernel_sizes = [3, 5, 7 ,9]
-    dilated_list = [1, 1, 1 ,1]
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # 创建测试输入和模型
-    x = torch.randn(2, C_in, img_size, img_size).to(device)
-    model = SK_Channel_atten2D(img_size, C_in, C_out, kernel_sizes, dilated_list).to(device)
-    
-    # 前向传播
-    output = model(x)
-    print("Input shape:", x.shape)
-    print("Output shape:", output.shape)  # 应输出 (2, 64, 128, 128)
-
 
 class conv_mixer(nn.Module):
     def __init__(self,input_channel,conv_mode,kernel_size,dilate):
@@ -140,41 +114,6 @@ class conv_mixer(nn.Module):
         out1 = out1 + x
         out2 = self.gelu2(self.BN2(self.conv2(out1)))
         return out2
-
-
-def conv_mixer_test():
-
-        # 示例参数
-    batch_size = 10  # 批次大小
-    channels = 20  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
-
-    kernel_list = [3,5,7,9,11]  
-    dilated_list = [1,2,4,8,4]
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
-    print(f"Input shape: {x.shape}")
-    inception_module = conv_mixer(input_channel = channels,conv_mode = "inception_cat",kernel_size = kernel_list,dilate = dilated_list)
-    output_tensor = inception_module(x)
-    
-    print(f"inception_cat test Output shape: {output_tensor.shape}")
-
-    inception_module = conv_mixer(input_channel = channels,conv_mode = "inception_sum",kernel_size = kernel_list,dilate = dilated_list)
-    output_tensor = inception_module(x)
-    
-    print(f"inception_sum test Output shape: {output_tensor.shape}")
-
-    inception_module = conv_mixer(input_channel = channels,conv_mode = "norm",kernel_size = 3,dilate = 1)
-    output_tensor = inception_module(x)
-    
-    print(f"norm test Output shape: {output_tensor.shape}")
-
-
-
-
-
-
-### 下面分形网络的通道输出至少是可以除以16
 
 class fractal_conv(nn.Module):
     def __init__(self,C_in,C_out,kernel_list,dilated_list,inception_module):
@@ -226,67 +165,6 @@ class fractal_conv(nn.Module):
 
         return result
 
-def fractal_conv_test():
-    # 示例参数
-    batch_size = 2
-    channels = 32
-    img_H = 64
-    img_W = 64
-    kernel_list = [ 3, 5, 7, 9]
-    dilated_list = [ 2, 4, 8, 4]
-    C_out = 64
-
-    # 创建测试输入
-    x = torch.randn(batch_size, channels, img_H, img_W)
-
-    # 要测试的模块列表
-    inception_modules = [
-        Inception_group_cat,
-        inception_sum,
-        inception_ghost_sum,
-        Inception_cat,
-        Inception_ghost_cat
-    ]
-
-    # 模块名称列表（用于输出）
-    module_names = [
-        "Inception_group_cat",
-        "inception_sum",
-        "inception_ghost_sum",
-        "Inception_cat",
-        "Inception_ghost_cat"
-    ]
-
-    print("开始测试各种 Inception 模块...")
-    print(f"输入形状: {x.shape}")
-    print("-" * 50)
-
-    # 循环测试每个模块
-    for i, (module_class, module_name) in enumerate(zip(inception_modules, module_names)):
-        try:
-            print(f"测试 {i + 1}/{len(inception_modules)}: {module_name}")
-
-            # 创建残差块
-            residual_block = fractal_conv(
-                C_in=channels,
-                C_out=C_out,
-                kernel_list=kernel_list,
-                dilated_list=dilated_list,
-                inception_module=module_class
-            )
-
-            # 前向传播
-            output_tensor = residual_block(x)
-
-            # 打印结果
-            print(f"输出形状: {output_tensor.shape}")
-            print(f"测试通过 ✓")
-            print("-" * 30)
-
-        except Exception as e:
-            print(f"测试 {module_name} 时出错: {e}")
-            print("-" * 30)
-
 class res_incep_ghost_sum(res_incep):
     def __init__(self, C_in, C_out, kernel_list, dilated_list):
         super().__init__(C_in, C_out, kernel_list, dilated_list, inception_ghost_sum)
@@ -311,22 +189,6 @@ class res_Inception_ghost_cat(res_incep):
     def __init__(self, C_in, C_out, kernel_list, dilated_list):
         super().__init__(C_in, C_out, kernel_list, dilated_list, Inception_ghost_cat)
 
-def res_Inception_ghost_cat_test():
-        # 示例参数
-    batch_size = 2
-    channels = 32
-    img_H = 64
-    img_W = 64
-    kernel_list = [ 3, 5, 7, 9]
-    dilated_list = [ 2, 4, 8, 4]
-    C_out = 64
-
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
-
-    inception_module = res_Inception_ghost_cat(C_in=channels, C_out=C_out, kernel_list=kernel_list, dilated_list=dilated_list)
-    output_tensor = inception_module(x)
-    print(f"Input shape: {x.shape}")
-    print(f"Output shape: {output_tensor.shape}")
 
 class res_fractal_conv(nn.Module):
     def __init__(self, C_in, C_out, kernel_list, dilated_list, inception_module):
@@ -340,38 +202,5 @@ class res_fractal_conv(nn.Module):
     def forward(self, x):
         return channel_shuffle(self.frac_conv(x) + self.short_path(x))
 
-def res_fractal_conv_test():
-    batch_size = 2
-    channels = 32
-    img_H = 64
-    img_W = 64
-    kernel_list = [ 3, 5, 7, 9]
-    dilated_list = [ 2, 4, 8, 4]
-    C_out = 64
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
-
-    inception_module = res_fractal_conv(C_in=channels,
-                                        C_out=C_out, 
-                                        kernel_list=kernel_list, 
-                                        dilated_list=dilated_list,
-                                        inception_module = res_Inception_ghost_cat)
-    output_tensor = inception_module(x)
-    print(f"Input shape: {x.shape}")
-    print(f"Output shape: {output_tensor.shape}")
-
-
-
-
-
-# 运行测试
-if __name__ == "__main__":
-
-    # SE_Channel_attan2D_test()
-    # SK_Channel_atten2D_test()
-
-    # conv_mixer_test()
-    # fractal_conv_test()
-    res_fractal_conv_test()
-    res_Inception_ghost_cat_test()
 
 
