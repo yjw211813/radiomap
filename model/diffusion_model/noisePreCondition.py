@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as F
-from model.sub_block.conv2D_block import *
+from model.sub_block.mid_conv import *
 
 # def drop_connect(x, drop_ratio):
 #     keep_ratio = 1.0 - drop_ratio

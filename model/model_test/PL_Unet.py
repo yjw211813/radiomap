@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-from model.sub_block.conv2D_block import *
+from model.sub_block.mid_conv import *
 from environment_code.tif_convert_height import map_info
 
 

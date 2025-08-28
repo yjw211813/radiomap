@@ -5,8 +5,8 @@ import os
 ##  在多尺度卷积基础上，将多尺度卷积引入到分形网络中
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-from model.sub_block.Channel_atten_block import SK_Channel_atten2D
-from model.sub_block.conv2D_block import Conv_DownSampling2D,Fractal_multi_scale2D,ConvTranspose_UpSam,multi_scale_block2D
+from model.sub_block.top_conv import SK_Channel_atten2D
+from model.sub_block.mid_conv import Conv_DownSampling2D,Fractal_multi_scale2D,ConvTranspose_UpSam,multi_scale_block2D
 from torch.nn import functional as F
 
 
