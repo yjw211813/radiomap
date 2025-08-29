@@ -109,11 +109,11 @@ class GhostConv2D(nn.Module):
 
 
 class dw_decompos_conv(nn.Module):
-    def __init__(self, inp, oup, dw_kernel, dw_dilated):
+    def __init__(self, inp, oup, dw_kernel, dw_dilated,drop_out = 0.05):
         super(dw_decompos_conv, self).__init__()
 
-        self.conv1X1 = BasicNormConv(C_in = inp, C_out = oup, kernel_size = 1, dilation = 1)
-        self.dw_conv = BasicNormConv(C_in = oup, C_out = oup, kernel_size = dw_kernel, dilation = dw_dilated, groups = oup)
+        self.conv1X1 = BasicNormConv(C_in = inp, C_out = oup, kernel_size = 1, dilation = 1, dropout_rate = drop_out)
+        self.dw_conv = BasicNormConv(C_in = oup, C_out = oup, kernel_size = dw_kernel, dilation = dw_dilated, groups = oup, dropout_rate = drop_out)
     def forward(self, x):
         out = self.dw_conv(self.conv1X1(x))
         return out

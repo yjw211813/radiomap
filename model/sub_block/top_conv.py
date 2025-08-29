@@ -329,49 +329,6 @@ class MSAA_channel_atten(nn.Module):
         return self.conv_end( self.compress(x))
 
 
-def MSAA_space_atten_test():
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-    batch_size = 8
-    channels = 64
-    img_H = 64
-    img_W = 64
-
-    # 测试包含恒等层的情况（kernel_list中包含0）
-
-    kernel_list = [3, 5, 7]  # 包含恒等层
-    dilated_list = [1, 1, 1]
-
-    x = torch.randn(batch_size, channels, img_H, img_W).to(device)
-    model = MSAA_space_atten(
-        C_in=channels,
-        space_pool_kernel=7,
-        kernel_list=kernel_list,
-        dilated_list=dilated_list
-    ).to(device)
-
-    output = model(x)
-    print("Input shape:", x.shape)
-    print("Output shape:", output.shape)
-    assert output.shape == x.shape, "Output shape should match input shape"
-
-def MSAA_channel_atten_test():
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-
-    # 示例参数
-    batch_size = 4  # 批次大小
-    channels = 2  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
-    img_size = 128
-
-    x = torch.randn(batch_size, channels, img_H, img_W).to(device) # 随机生成输入数据
-    compress = MSAA_channel_atten(img_size = img_size, C_in = channels).to(device)
-    output = compress(x)
-    print("Input shape:",x.shape)
-    print("Output shape:", output.shape)
-
-
-
 class MSAA_origin(nn.Module):
     def __init__(self, C_in,img_size, kernel_list, dilated_list):
         super(MSAA_origin, self).__init__()
@@ -384,24 +341,6 @@ class MSAA_origin(nn.Module):
     def forward(self, x):
 
         return x + self.channel_atten(x)*self.space_atten(x)
-
-def MSAA_origin_test():
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-
-    # 示例参数
-    batch_size = 4  # 批次大小
-    C_in = 2  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
-    img_size = 128
-
-    kernel_list = [3, 5, 7]  # 包含恒等层
-    dilated_list = [1, 1, 1]
-    x = torch.randn(batch_size, C_in, img_H, img_W).to(device) # 随机生成输入数据
-    compress = MSAA_origin(C_in = C_in,img_size = img_size, kernel_list = kernel_list, dilated_list = dilated_list).to(device)
-    output = compress(x)
-    print("Input shape:",x.shape)
-    print("Output shape:", output.shape)
 
 
 class MSAA_space_channel(nn.Module):
@@ -418,24 +357,6 @@ class MSAA_space_channel(nn.Module):
         out_channel = self.channel_atten(out_space)*out_space
         return out_channel
 
-def MSAA_space_channel_test():
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-
-    # 示例参数
-    batch_size = 4  # 批次大小
-    C_in = 2  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
-    img_size = 128
-
-    kernel_list = [3, 5, 7]  # 包含恒等层
-    dilated_list = [1, 1, 1]
-    x = torch.randn(batch_size, C_in, img_H, img_W).to(device) # 随机生成输入数据
-    compress = MSAA_space_channel(C_in = C_in,img_size = img_size, kernel_list = kernel_list, dilated_list = dilated_list).to(device)
-    output = compress(x)
-    print("Input shape:",x.shape)
-    print("Output shape:", output.shape)
-
 class MSAA_channel_space(nn.Module):
     def __init__(self, C_in,img_size, kernel_list, dilated_list):
         super(MSAA_channel_space, self).__init__()
@@ -451,32 +372,8 @@ class MSAA_channel_space(nn.Module):
 
         return out_space
 
-def MSAA_channel_space_test():
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-
-    # 示例参数
-    batch_size = 4  # 批次大小
-    C_in = 2  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
-    img_size = 128
-
-    kernel_list = [3, 5, 7]  # 包含恒等层
-    dilated_list = [1, 1, 1]
-    x = torch.randn(batch_size, C_in, img_H, img_W).to(device) # 随机生成输入数据
-    compress = MSAA_channel_space(C_in = C_in,img_size = img_size, kernel_list = kernel_list, dilated_list = dilated_list).to(device)
-    output = compress(x)
-    print("Input shape:",x.shape)
-    print("Output shape:", output.shape)
-
-
 
 if __name__ == '__main__':
 
-    MSAA_space_atten_test()
 
-    MSAA_channel_atten_test()
-    MSAA_origin_test()
-    MSAA_space_channel_test()
-    MSAA_channel_space_test()
     print(1)
