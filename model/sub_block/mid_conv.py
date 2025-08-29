@@ -74,7 +74,7 @@ class inception_group_sum(nn.Module):
         return output  # 在通道维度上拼接
 
 class inception_sum(nn.Module):
-    def __init__(self, C_in, C_out,kernel_list,dilated_list,drop_out=0.05):
+    def __init__(self, C_in, C_out,kernel_list,dilated_list,drop_out=0.05, gelu = True, norm = True):
         super(inception_sum, self).__init__()
 
 
@@ -84,7 +84,9 @@ class inception_sum(nn.Module):
                                                 C_out = C_out, 
                                                 kernel_size = kernel_list[i], 
                                                 dilation = dilated_list[i],
-                                                dropout_rate = drop_out))
+                                                dropout_rate = drop_out,
+                                                gelu=gelu,
+                                                norm=norm))
     def forward(self, x):
         output = None
         for conv in self.conv_list:

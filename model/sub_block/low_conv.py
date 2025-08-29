@@ -12,14 +12,14 @@ class Swish_act(nn.Module):
 
 
 class BasicNormConv(nn.Module):
-    def __init__(self, C_in, C_out, kernel_size, dilation = 1, dropout_rate=0.05,groups = 1,gelu=True):
+    def __init__(self, C_in, C_out, kernel_size, dilation = 1, dropout_rate=0.05,groups = 1,gelu=True,norm = True):
         super(BasicNormConv, self).__init__()
         dilated_kernel_size = (kernel_size - 1) * dilation + 1
         padding_width = (dilated_kernel_size - 1) // 2
         self.block = nn.Sequential(
             nn.Conv2d(C_in, C_out, kernel_size=kernel_size,
                       dilation=dilation, padding=padding_width,groups=groups),
-            nn.BatchNorm2d(C_out),
+            nn.BatchNorm2d(C_out)if norm else nn.Sequential(),
             nn.GELU() if gelu else nn.Sequential(),
             nn.Dropout(dropout_rate),
         )
@@ -152,10 +152,7 @@ class PyramidConvCompress(nn.Module):
             current_size = current_size // 2  # 每次降采样尺寸减半
 
         # 最后一个卷积层，通常会使用较大的卷积核来整合特征
-        self.compress_info.append(nn.Sequential(
-            nn.Conv2d(C_in, C_in, kernel_size=current_size, groups=C_in),
-            nn.GELU()
-        ))
+        self.compress_info.append(nn.Conv2d(C_in, C_in, kernel_size=current_size, groups=C_in))
 
     def forward(self, x):
         # 前向传播
