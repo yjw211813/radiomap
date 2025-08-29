@@ -5,6 +5,11 @@ from torch.nn import functional as F
 
 
 # deepseek 推荐先 BatchNorm2d 再进行 GELU
+class Swish_act(nn.Module):
+    def forward(self, x):
+        return x * torch.sigmoid(x)
+
+
 
 class BasicNormConv(nn.Module):
     def __init__(self, C_in, C_out, kernel_size, dilation = 1, dropout_rate=0.05,groups = 1,gelu=True):

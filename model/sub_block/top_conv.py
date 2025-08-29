@@ -1,8 +1,15 @@
 import torch
 import torch.nn as nn
-from model.sub_block.low_conv import BasicNormConv,PyramidConvCompress
+from sympy.strategies.core import switch
+from transformers.models.rwkv.modeling_rwkv import rwkv_linear_attention
+
+from model.sub_block.low_conv import BasicNormConv,PyramidConvCompress,dw_decompos_conv,Swish_act
 from model.sub_block.mid_conv import Inception_group_cat,inception_group_sum,inception_ghost_sum,inception_sum,Inception_cat,Inception_ghost_cat
 from model.sub_block.mid_conv import res_incep,channel_shuffle
+from torch.nn import functional as F
+
+
+
 '''
     高层次模块
 '''
@@ -202,5 +209,157 @@ class res_fractal_conv(nn.Module):
     def forward(self, x):
         return channel_shuffle(self.frac_conv(x) + self.short_path(x))
 
+# CA(X) = X+γ ⊙ ( X - GELU(XW) )
+# Y= GELU(DW:x:(Conv1x1(Norm(X)))
+# Z=Conv1x1(CA(Y))+ X.
+class subtract_Channel_atten(nn.Module):
+    def __init__(self, C_in,gama = 2):
+        super(subtract_Channel_atten,self).__init__()
+        C_out = gama*C_in
+        self.conv_begin =nn.Sequential(dw_decompos_conv(inp = C_in,oup = C_out, dw_kernel = 3, dw_dilated = 1),
+                                   nn.BatchNorm2d(C_out),
+                                   nn.GELU())
+        self.CA_conv = nn.Sequential(BasicNormConv(C_in = C_out, C_out = 1, kernel_size = 1),nn.GELU())
+        self.conv_end = BasicNormConv(C_in = C_out, C_out = C_in, kernel_size = 1)
+        self.sigma = nn.Parameter(torch.zeros(1))
+    def forward(self, x):
+        CA_in = self.conv_begin(x)
+        CA_out =CA_in +self.sigma *  (CA_in - self.CA_conv(CA_in))
+        out = self.conv_end(CA_out)
+        return out
 
 
+def subtract_Channel_atten_test():
+    # 示例参数
+    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    batch_size = 10  # 批次大小
+    channels = 4 # 通道数
+    img_H = 64  # 序列长度
+    img_W = 64  # 第三维度长度
+
+    x = torch.randn(batch_size, channels, img_H, img_W).to(device)  # 随机生成输入数据
+    CA = subtract_Channel_atten(C_in=channels).to(device)
+    output = CA(x)
+    print("input shape:" , x.shape)
+    print("Output shape:", output.shape)
+
+
+# 修复后的MoGA_dw_conv类
+class MoGA_dw_conv(nn.Module):
+    def __init__(self, C_in, ratio_list, kernel_list, dilated_list):
+        super(MoGA_dw_conv, self).__init__()
+        self.conv_begin = BasicNormConv(C_in=C_in, C_out=C_in, kernel_size=5, dilation=1, groups=C_in)
+        self.C_mid_list = [int(C_in * ratio) for ratio in ratio_list]
+
+        assert sum(self.C_mid_list) == C_in, "Sum of mid channels must equal C_in"
+        self.conv_list = nn.ModuleList()
+
+        for i in range(len(self.C_mid_list)):
+            if kernel_list[i] == 0:
+                # 使用恒等映射层
+                self.conv_list.append(nn.Identity())
+            else:
+                self.conv_list.append(BasicNormConv(
+                    C_in=self.C_mid_list[i],
+                    C_out=self.C_mid_list[i],
+                    kernel_size=kernel_list[i],
+                    dilation=dilated_list[i],
+                    groups=self.C_mid_list[i]
+                ))
+        self.conv_end = BasicNormConv(C_in=C_in, C_out=C_in, kernel_size=1)
+        self.silu = Swish_act()
+
+    def forward(self, x):
+        out1 = channel_shuffle(self.conv_begin(x))
+        out_mid_list = []
+        index_sum = 0
+        for i in range(len(self.conv_list)):
+
+            chunk = out1[:, index_sum:index_sum + self.C_mid_list[i], :, :]
+            out_mid_list.append(self.conv_list[i](chunk))
+            index_sum += self.C_mid_list[i]
+
+        out_end = self.silu(self.conv_end(torch.cat(out_mid_list, dim=1)))
+        return out_end
+
+# 测试函数
+def test_MoGA_dw_conv_with_identity():
+    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    batch_size = 10
+    channels = 64
+    img_H = 64
+    img_W = 64
+
+    # 测试包含恒等层的情况（kernel_list中包含0）
+    ratio_list = [0.375, 0.125, 0.5]
+    kernel_list = [5, 0, 7]  # 包含恒等层
+    dilated_list = [2, 1, 3]
+
+    x = torch.randn(batch_size, channels, img_H, img_W).to(device)
+    model = MoGA_dw_conv(
+        C_in=channels,
+        ratio_list=ratio_list,
+        kernel_list=kernel_list,
+        dilated_list=dilated_list
+    ).to(device)
+
+    output = model(x)
+    print("Input shape:", x.shape)
+    print("Output shape:", output.shape)
+    assert output.shape == x.shape, "Output shape should match input shape"
+
+#Z=X+Moga(FD(Norm(X)))
+#Y = Conv1X1(X)
+#Z=GELU(Y+gama⊙(Y-GAP(Y)))
+class MoGA_atten(nn.Module):
+    def __init__(self, C_in,ratio_list,kernel_list,dilated_list):
+        super(MoGA_atten,self).__init__()
+
+
+        self.norm_layer = nn.BatchNorm2d(C_in)
+        self.conv1X1_begin =BasicNormConv(C_in=C_in, C_out=C_in, kernel_size=1)
+        self.gelu = nn.GELU()
+        self.silu = Swish_act()
+
+        self.moga_res_conv1X1 = BasicNormConv(C_in = C_in, C_out = C_in, kernel_size = 1)
+        self.moga_out_conv1X1 = BasicNormConv(C_in=C_in, C_out=C_in, kernel_size=1)
+        self.moga_dwConv =MoGA_dw_conv(C_in = C_in, ratio_list = ratio_list,kernel_list = kernel_list, dilated_list= dilated_list)
+        self.sigma = nn.Parameter(torch.zeros(1))
+
+    def forward(self, x):
+        out_begin = self.conv1X1_begin(self.norm_layer(x))
+        out_gate = self.gelu(out_begin + self.sigma*(out_begin - F.adaptive_avg_pool2d(out_begin, output_size=1)))
+        out_moga = self.moga_out_conv1X1(self.silu(self.moga_res_conv1X1(out_gate)) + self.moga_dwConv(out_gate))
+        out_moga = out_moga + x
+        return out_moga
+
+# 测试函数
+def MoGA_atten_test():
+    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    batch_size = 10
+    channels = 64
+    img_H = 64
+    img_W = 64
+
+    # 测试包含恒等层的情况（kernel_list中包含0）
+    ratio_list = [0.375, 0.125, 0.5]
+    kernel_list = [5, 0, 7]  # 包含恒等层
+    dilated_list = [2, 1, 3]
+
+    x = torch.randn(batch_size, channels, img_H, img_W).to(device)
+    model = MoGA_atten(
+        C_in=channels,
+        ratio_list=ratio_list,
+        kernel_list=kernel_list,
+        dilated_list=dilated_list
+    ).to(device)
+
+    output = model(x)
+    print("Input shape:", x.shape)
+    print("Output shape:", output.shape)
+    assert output.shape == x.shape, "Output shape should match input shape"
+
+
+if __name__ == '__main__':
+    test_MoGA_dw_conv_with_identity()
+    MoGA_atten_test()
