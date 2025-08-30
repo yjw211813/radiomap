@@ -37,17 +37,18 @@ should not be used}
 
 \begin{abstract}
 
+
+
+
 Radio environment maps (REMs) play a pivotal role in optimizing wireless network 
 scheduling and cognitive radio spectrum management by enabling location-based pathloss 
 estimation with reduced communication overhead.
-
-
-
 
 Radio environment maps (REMs) play a pivotal role in optimizing wireless network scheduling and cognitive 
 radio spectrum management by enabling location-based pathloss estimation with reduced communication overhead. 
 Existing deep learning-based methods, particularly those based on U-Net architectures, struggle with balancing 
 model complexity, computational efficiency, and the accurate representation of complex environmental features. 
+
 To address these challenges, this paper proposes a novel lightweight U-Net variant for high-fidelity REM construction. 
 Our key contribution is threefold: First, we introduce a \textbf{masked attention} mechanism that processes contextual 
 environmental data through a parallel convolutional pathway, generating attention masks that dynamically refine the decoder's 
@@ -63,16 +64,35 @@ feature maps via element-wise multiplication. Second, we employ \textbf{lightwei
 Radio environment map (REM), deep learning, U-Net, attention mechanism, lightweight convolution, spectrum mapping.
 \end{IEEEkeywords}
 \section{Introduction}
-电磁地图应用广泛
-电磁地图当前存在的问题
-经典方法快的不准确，慢的计算量大应用范围窄
-使用深度学习有很多进展
-但是上面也存在精度问题和阴影区域预测问题，并且当前应用于电磁地图构建模型量级比较大
-本文提出基于掩码注意力的UNet架构
-- 使用掩码注意力模块来解决阴影区域预测问题
-- 使用ghost卷积模块作为基础的卷积模块来解决模型量级过大，使用多尺度卷积和分形卷积提升了模型的信息提取能力和还原能力
-- 我们实验了experimentally validate our model against SOTA alternatives, demonstrating superior or 
-    comparable accuracy with significantly improved computational efficiency.
+
+
+
+% 电磁地图应用广泛
+The rapid proliferation of wireless technologies—such as the Internet of Things,
+autonomous systems, and cellular networks has intensified the demand for efficient 
+spectrum management and reliable network coverage. Central to these tasks is the 
+ability to accurately characterize the radio frequency (RF) propagation environment, 
+particularly through the construction of radio environment maps (REMs). These maps 
+depict large-scale fading (LSF) effects and provide vital spatial distributions of 
+metrics such as signal power spectral density (PSD) and path loss, which critically 
+support applications including spectrum sharing, localization, unmanned aerial vehicle 
+(UAV) path planning, and network resource optimization. However, acquiring fine-grained 
+REMs remains a fundamental challenge due to the inherent sparsity of real-world signal 
+measurements collected by sensors or user equipment. Conventional methods that rely 
+heavily on pilot transmissions and signal processing are often inefficient and limited 
+in scalability. Thus, there is a pressing need to develop advanced techniques for 
+high-precision electromagnetic map construction from sparse and irregular measurements, 
+enabling efficient and accurate estimation of propagation characteristics across 
+diverse wireless environments.
+% 电磁地图当前存在的问题
+% 经典方法快的不准确，慢的计算量大应用范围窄
+% 使用深度学习有很多进展
+% 但是上面也存在精度问题和阴影区域预测问题，并且当前应用于电磁地图构建模型量级比较大
+% 本文提出基于掩码注意力的UNet架构
+% - 使用掩码注意力模块来解决阴影区域预测问题
+% - 使用ghost卷积模块作为基础的卷积模块来解决模型量级过大，使用多尺度卷积和分形卷积提升了模型的信息提取能力和还原能力
+% - 我们实验了experimentally validate our model against SOTA alternatives, demonstrating superior or 
+%     comparable accuracy with significantly improved computational efficiency.
 The rapid proliferation of wireless technologies, encompassing the Internet of Things (IoT), 
 autonomous vehicles, and next-generation cellular networks (e.g., for unmanned aerial vehicle coordination), 
 necessitates intelligent radio resource management. Radio Environment Maps (REMs) have emerged as a critical 
