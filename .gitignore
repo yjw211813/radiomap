@@ -13,6 +13,7 @@
 *.pdf
 *.bbl
 *.out
+*.synctex*
 /data/RadioMapSeer.zip
 /data/RadioMapSeer
 *.pth
