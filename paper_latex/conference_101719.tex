@@ -12,12 +12,14 @@
 \usepackage{textcomp}
 % 颜色标记包
 \usepackage{xcolor}
+% 超链接交互    
+\usepackage{hyperref}
 % 排版BibTeX的Logo样式
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 % 第一个是标题下面，第二个 第一页最下面
-\title{Radio map construction using UNet++*\\
+\title{Radio map construction using mask attention UNet\\
 {\footnotesize \textsuperscript{*}Note: Sub-titles are not captured in Xplore and
 should not be used}
 \thanks{Identify applicable funding agency here. If none, delete this.}
@@ -25,79 +27,176 @@ should not be used}
 % 作者
 \author{
     \IEEEauthorblockN{1\textsuperscript{st} zhengyanliao}
-    \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-    \textit{name of organization (of Aff.)}\\
-    City, Country \\
-    email address or ORCID}
-    
-    \and
-
-    \IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
-    \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-    \textit{name of organization (of Aff.)}\\
-    City, Country \\
-    email address or ORCID}
-
-    \and
-
-    \IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
-    \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-    \textit{name of organization (of Aff.)}\\
-    City, Country \\
-    email address or ORCID}
-
-    \and
-
-    \IEEEauthorblockN{4\textsuperscript{th} Given Name Surname}
-    \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-    \textit{name of organization (of Aff.)}\\
-    City, Country \\
-    email address or ORCID}
-
-    \and
-
-    \IEEEauthorblockN{5\textsuperscript{th} Given Name Surname}
-    \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-    \textit{name of organization (of Aff.)}\\
-    City, Country \\
-    email address or ORCID}
-
-    \and
-
-    \IEEEauthorblockN{6\textsuperscript{th} Given Name Surname}
-    \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-    City, Country \\
-    email address or ORCID}
-
+    \IEEEauthorblockA{\textit{Department of Automation } \\
+    \textit{Beijin institue of technologie}\\
+    Beijin, China \\
+    3120230873@bit.edu.cn}
 }
 
 \maketitle
 
 \begin{abstract}
 
-Radio environment maps (REMs) play a pivotal role in optimizing wireless network scheduling and cognitive radio spectrum management by enabling location-based pathloss estimation with reduced communication overhead.
-NIAHO
+Radio environment maps (REMs) play a pivotal role in optimizing wireless network 
+scheduling and cognitive radio spectrum management by enabling location-based pathloss 
+estimation with reduced communication overhead.
 
-This document is a model and instructions for \LaTeX.
-This and the IEEEtran.cls file define the components of your paper [title, text, heads, etc.]. *CRITICAL: Do Not Use Symbols, Special Characters, Footnotes, 
-or Math in Paper Title or Abstract.
+
+
+
+Radio environment maps (REMs) play a pivotal role in optimizing wireless network scheduling and cognitive 
+radio spectrum management by enabling location-based pathloss estimation with reduced communication overhead. 
+Existing deep learning-based methods, particularly those based on U-Net architectures, struggle with balancing 
+model complexity, computational efficiency, and the accurate representation of complex environmental features. 
+To address these challenges, this paper proposes a novel lightweight U-Net variant for high-fidelity REM construction. 
+Our key contribution is threefold: First, we introduce a \textbf{masked attention} mechanism that processes contextual 
+environmental data through a parallel convolutional pathway, generating attention masks that dynamically refine the decoder's 
+feature maps via element-wise multiplication. Second, we employ \textbf{lightweight Ghost convolution} modules as our foundational
+ building blocks, significantly reducing parameters and computational cost while maintaining representational power. 
+ Third, we integrate \textbf{multi-scale feature extraction} and a \textbf{standard interpolation pre-processing} step to enhance 
+ the model's ability to handle sparse and irregularly distributed measurement data. Extensive experiments demonstrate that our proposed 
+ model achieves state-of-the-art (SOTA) performance in reconstruction accuracy while boasting a substantially lower parameter count and 
+ computational footprint compared to existing benchmarks.
 \end{abstract}
 
 \begin{IEEEkeywords}
-component, formatting, style, styling, insert
+Radio environment map (REM), deep learning, U-Net, attention mechanism, lightweight convolution, spectrum mapping.
 \end{IEEEkeywords}
+\section{Introduction}
+电磁地图应用广泛
+电磁地图当前存在的问题
+经典方法快的不准确，慢的计算量大应用范围窄
+使用深度学习有很多进展
+但是上面也存在精度问题和阴影区域预测问题，并且当前应用于电磁地图构建模型量级比较大
+本文提出基于掩码注意力的UNet架构
+- 使用掩码注意力模块来解决阴影区域预测问题
+- 使用ghost卷积模块作为基础的卷积模块来解决模型量级过大，使用多尺度卷积和分形卷积提升了模型的信息提取能力和还原能力
+- 我们实验了experimentally validate our model against SOTA alternatives, demonstrating superior or 
+    comparable accuracy with significantly improved computational efficiency.
+The rapid proliferation of wireless technologies, encompassing the Internet of Things (IoT), 
+autonomous vehicles, and next-generation cellular networks (e.g., for unmanned aerial vehicle coordination), 
+necessitates intelligent radio resource management. Radio Environment Maps (REMs) have emerged as a critical 
+tool in this domain. A REM provides a spatial representation of key radio frequency features, such as signal 
+strength or power spectral density, across a geographical area. By modeling the pathloss function, which 
+describes signal attenuation over distance, a REM can predict the signal quality at any given location, 
+thereby reducing the need for exhaustive physical measurements.
 
+This capability is fundamental for various applications: optimizing scheduler distributions in massive 
+IoT networks, ensuring stable communication links for autonomous driving, and enabling dynamic spectrum 
+access in cognitive radio systems. Consequently, the construction of accurate and fine-grained REMs from 
+limited, often sparse, sensor measurements is a problem of significant practical importance.
+
+Traditional interpolation techniques (e.g., Kriging, IDW) often fail to capture the complex, non-linear 
+propagation effects caused by urban obstacles. Deep learning approaches, especially Convolutional Neural 
+Networks (CNNs) based on the U-Net architecture, have shown remarkable success in learning these complex 
+mappings from data. However, prevailing SOTA models often prioritize performance at the expense of model 
+size and complexity, making them unsuitable for resource-constrained edge deployment. Furthermore, many 
+lack specialized mechanisms to effectively integrate auxiliary environmental data (e.g., building layouts, 
+terrain) to guide the reconstruction process.
+
+In this paper, we propose a novel and efficient architecture for REM construction that addresses these 
+limitations. Our main contributions are:
+\begin{itemize}
+    \item We introduce a \textbf{masked attention} mechanism within a U-Net framework. This mechanism uses 
+    a dedicated convolutional branch to process auxiliary environmental data, generating a mask that is 
+    applied to the decoder path via element-wise multiplication, effectively focusing the model on pertinent 
+    contextual features.
+    \item We design a lightweight model by leveraging \textbf{Ghost convolution} modules as the core 
+    convolutional block. This design drastically reduces the number of model parameters and floating-point 
+    operations (FLOPs) without sacrificing performance.
+    \item We enhance feature representation through \textbf{multi-scale} and \textbf{fractal-inspired} 
+    convolutional processing within the Ghost modules and incorporate a \textbf{standard interpolation 
+    pre-processing} step to create a initial prior for the network.
+    \item We experimentally validate our model against SOTA alternatives, demonstrating superior or 
+    comparable accuracy with significantly improved computational efficiency.
+\end{itemize}
+
+\section{Related Work}
+\subsection{Radio Environment Map Construction}
+Briefly review traditional methods (Kriging, etc.) and early machine learning approaches.
+\subsection{Deep Learning for REM}
+Discuss the adoption of CNNs, GANs, and specifically highlight the prevalence and success of U-Net 
+architectures in image-to-image regression tasks like REM construction. Mention key SOTA models that 
+our work will be compared against.
+\subsection{Attention Mechanisms in CNNs}
+Review the concept of attention in computer vision and how it has been used to improve CNNs (e.g., SE blocks, 
+CBAM). Differentiate our ``masked attention'' approach from these.
+\subsection{Lightweight Neural Networks}
+Discuss architectures like MobileNet, ShuffleNet, and the concept of GhostNet, which our convolutional 
+module is based upon. justify the need for lightweight models in REM applications.
+
+\section{Proposed Methodology}
+\subsection{Network Architecture Overview}
+Describe the overall U-Net structure of the proposed model. Include a high-level architectural diagram 
+(Figure 1).
+\subsection{Interpolation Pre-processing}
+Explain the pre-processing step where sparse measurements are initially interpolated (e.g., using 
+IDW or linear interpolation) to create a dense input image for the network.
+\subsection{Ghost Convolution Module with Multi-Scale Features}
+Detail the structure of our proposed lightweight convolutional block. Explain how it uses Ghost 
+convolution to reduce parameters. Describe how it incorporates multi-scale and fractal-inspired 
+convolutional kernels to capture features at various scales effectively. Include a diagram of the 
+module (Figure 2).
+\subsection{Masked Attention Mechanism}
+This is a key subsection. Detail the parallel environmental data processing path. Explain how the 
+attention mask is generated from this data (e.g., through a series of conv layers). Describe precisely
+ how this mask is applied to the feature maps in the decoder (element-wise multiplication). 
+ Explain the intended effect: to gate or highlight features relevant to the environmental context (e.g., 
+ suppressing predictions behind buildings). Include a diagram illustrating this mechanism (Figure 3).
+
+\section{Experiments and Results}
+\subsection{Experimental Setup}
+\begin{itemize}
+    \item \textbf{Datasets}: Describe the dataset(s) used for training and evaluation (real-world, 
+    synthetic, or both). Mention how data was split.
+    \item \textbf{Evaluation Metrics}: Define metrics used (e.g., Mean Absolute Error (MAE), Root 
+    Mean Squared Error (RMSE), Normalized RMSE (NRMSE), SSIM).
+    \item \textbf{Implementation Details}: Mention framework (PyTorch/TensorFlow), optimizer, 
+    learning rate, batch size, etc.
+    \item \textbf{Baselines}: List the SOTA models and traditional methods used for comparison.
+\end{itemize}
+\subsection{Overall Performance Comparison}
+Present quantitative results (tables) comparing the proposed model against all baselines on the 
+chosen metrics. Highlight the best results. Include a discussion on the performance-complexity trade-off, 
+showcasing the parameter count and/or FLOPs of each model.
+\subsection{Ablation Studies}
+Perform studies to validate each component:
+\begin{itemize}
+    \item Base U-Net vs. +Ghost Convolution vs. +Ghost+Multi-scale vs. Full Model (+Masked Attention).
+    \item Effectiveness of the interpolation pre-processing step.
+    \item Impact of the masked attention branch.
+\end{itemize}
+Present these results in a table or graph.
+\subsection{Qualitative Results}
+Include visual comparisons (Figures) of the REMs generated by different methods against the 
+ground truth. Use these to visually demonstrate the improvements offered by your model (e.g., sharper
+ edges, better reconstruction in shadowed areas).
+
+\section{Discussion}
+Interpret the results. Why did the proposed model perform well? How does the masked 
+attention mechanism help qualitatively? What are the limitations of the current approach? What 
+are the implications of having a lightweight, accurate model (potential for edge deployment, 
+real-time inference)?
+
+% \section{Conclusion}
+% \subsection{Summary}
+% Concisely restate the problem, the proposed solution (masked attention, ghost modules, 
+% multi-scale features, interpolation pre-processing), and the key finding (SOTA performance 
+% with high efficiency).
+% \subsection{Future Work}
+% Suggest possible directions: testing on more diverse datasets, integrating different types 
+% of auxiliary data, exploring dynamic mask generation, further model compression.
 \section{Introduction}
 radio map represent a feature of one area
 
-\item pathloss function to provide signal attenuation value for a given distance.
-scheduling distribution of Internet of Things
-providing stable link between autonomous driving car
-next-generation cellular networks such as unmaned areplay to programer path
+% \item pathloss function to provide signal attenuation value for a given distance.
+% scheduling distribution of Internet of Things
+% providing stable link between autonomous driving car
+% next-generation cellular networks such as unmaned areplay to programer path
 
-\item contruction a situation around a area 
-manage this spectrum distribution on this area 
-get some information of signal source
+% \item contruction a situation around a area 
+% manage this spectrum distribution on this area 
+% get some information of signal source
 
 
 

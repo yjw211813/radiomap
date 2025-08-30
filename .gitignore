@@ -12,6 +12,7 @@
 # 生成的PDF
 *.pdf
 *.bbl
+*.out
 /data/RadioMapSeer.zip
 /data/RadioMapSeer
 *.pth
