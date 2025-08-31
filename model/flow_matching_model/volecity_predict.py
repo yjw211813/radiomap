@@ -9,7 +9,8 @@ class Swish(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
 
-# 这个暂时不动
+# input   t (torch.Tensor): 时间向量，形状为 [B]
+# output   torch.Tensor: 时间嵌入特征图，形状为 [B, 1, H, W]
 class TimeEmbedding(nn.Module):
     # d_model 是频率嵌入维度
     def __init__(self, T, d_model, img_H, img_W):
@@ -60,7 +61,16 @@ class TimeEmbedding(nn.Module):
         # 5. 重塑为空间特征图 [B, 1, H, W]
         return emb.reshape(-1, 1, self.img_H, self.img_W)
 
+
+
+
+
+
+
 # 这个条件网络可以进行更改 将这个网络和UNet中的attn作类比网络
+# 输入 input_shape
+# 输出 output_shape
+
 class ConditionalEmbedding(nn.Module):
     # d_model 则是嵌入向量的维度
     def __init__(self,input_shape, output_shape,C_list,kernel_list,dilated_list):
@@ -86,6 +96,8 @@ class ConditionalEmbedding(nn.Module):
         return out_map
 
 #标准 注意力模块
+# 输入 [B, C, H, W]
+# 输出 [B, C, H, W]
 class AttnBlock(nn.Module):
     def __init__(self, in_ch):
         super(AttnBlock,self).__init__()
@@ -117,6 +129,8 @@ class AttnBlock(nn.Module):
         return x + h
 
 # COT模块
+# 输入 [B, C, H, W]
+# 输出 [B, C, H, W]
 class CoTAttention(nn.Module):
 
     def __init__(self, C_in, kernel_size):
@@ -192,7 +206,8 @@ def COT_test():
     return output
 
 # LSKNet
-
+# 输入 [B, C, H, W]
+# 输出 [B, C, H, W]
 class LSKmodule(nn.Module):
     def __init__(self, C_in, kernel_mid, kernel_list, dilated_list, drop_out=0):
         super().__init__()
@@ -294,6 +309,7 @@ if __name__ == '__main__':
 
     # velocity_UNet_test()
     # ConditionalEmbedding_test()
+    COT_test()
     LSK_test()
 
 
