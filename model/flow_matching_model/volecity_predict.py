@@ -128,6 +128,45 @@ class AttnBlock(nn.Module):
 
         return x + h
 
+
+def attan_block_test():
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    print("attan_block_test")
+
+    # 清空GPU缓存并记录初始显存
+    torch.cuda.empty_cache()
+    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
+
+    print(f"初始显存占用: {initial_memory:.2f} MB")
+    C_in = 256
+    img_size = 64
+    # 创建模拟输入
+    x = torch.randn(16, C_in, img_size, img_size).to(device)
+    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
+    print(f"输入张量显存占用: {input_memory:.2f} MB")
+
+    # 创建注意力块
+    attn_block = AttnBlock(in_ch=C_in).to(device)
+    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
+    print(f"模型参数显存占用: {model_memory:.2f} MB")
+
+    # 前向传播
+    output = attn_block(x)
+
+    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+
+    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
+    print(f"总显存占用: {total_memory:.2f} MB")
+
+    print("Input shape:", x.shape)
+    print("Output shape:", output.shape)
+
+    # 峰值显存使用
+    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
+    print(f"峰值显存使用: {peak_memory:.2f} MB")
+
+    return output
 # COT模块
 # 输入 [B, C, H, W]
 # 输出 [B, C, H, W]
@@ -173,14 +212,15 @@ def COT_test():
     torch.cuda.empty_cache()
     initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
     print(f"初始显存占用: {initial_memory:.2f} MB")
-    C_in = 128
+    C_in = 64
+    img_size = 256
     # 创建输入张量
-    input = torch.randn(16, C_in, 128, 128).to(device)
+    input = torch.randn(16, C_in, img_size, img_size).to(device)
     input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
     print(f"输入张量显存占用: {input_memory:.2f} MB")
 
     # 创建模型
-    Model = CoTAttention(C_in=C_in, kernel_size=7).to(device)
+    Model = CoTAttention(C_in=C_in, kernel_size=5).to(device)
     model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
     print(f"模型参数显存占用: {model_memory:.2f} MB")
 
@@ -262,11 +302,11 @@ class LSKmodule(nn.Module):
 def LSK_test():
     print("LSK_test")
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-    C_in = 128
-    kernel_mid = 9
-    kernel_list = [3,5,7,9]
-    dilated_list = [1,1,3,1]
-    img_size = 128
+    C_in = 64
+    kernel_mid = 7
+    kernel_list = [5,7]
+    dilated_list = [1,3]
+    img_size = 256
     # 清空GPU缓存并记录初始显存
     torch.cuda.empty_cache()
     initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
@@ -310,7 +350,8 @@ if __name__ == '__main__':
     # velocity_UNet_test()
     # ConditionalEmbedding_test()
     COT_test()
-    LSK_test()
+    # attan_block_test()
+    # LSK_test()
 
 
 # class velocity_UNet(nn.Module):
