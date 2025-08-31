@@ -204,56 +204,15 @@ class CoTAttention(nn.Module):
 
         return k1 + k2
 
-def COT_test():
-    print("CoT_test")
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-
-    # 清空GPU缓存并记录初始显存
-    torch.cuda.empty_cache()
-    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
-    print(f"初始显存占用: {initial_memory:.2f} MB")
-    C_in = 64
-    img_size = 256
-    # 创建输入张量
-    input = torch.randn(16, C_in, img_size, img_size).to(device)
-    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
-    print(f"输入张量显存占用: {input_memory:.2f} MB")
-
-    # 创建模型
-    Model = CoTAttention(C_in=C_in, kernel_size=5).to(device)
-    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
-    print(f"模型参数显存占用: {model_memory:.2f} MB")
-
-    # 前向传播
-    start_time = time.time()
-    output = Model(input)
-    unfold_time = time.time() - start_time
-    print(f"Unfold实现时间: {unfold_time:.4f} 秒")
-    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
-    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
-
-    # 统计信息
-    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
-    print(f"总显存占用: {total_memory:.2f} MB")
-
-    # 峰值显存使用
-    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
-    print(f"峰值显存使用: {peak_memory:.2f} MB")
-
-    print("Input shape:", input.shape)
-    print("Output shape:", output.shape)
-
-    return output
-
 # LSKNet
 # 输入 [B, C, H, W]
 # 输出 [B, C, H, W]
 class LSKmodule(nn.Module):
-    def __init__(self, C_in, kernel_mid, kernel_list, dilated_list, drop_out=0):
+    def __init__(self, C_in, kernel_mid, kernel_list, dilated_list, drop_out=0,factor = 2):
         super().__init__()
         if C_in % len(kernel_list) != 0:
             raise ValueError(f"C_in ({C_in}) must be divisible by len(kernel_list)")
-        self.sub_Cout = int(C_in / len(kernel_list))
+        self.sub_Cout = int(C_in / len(kernel_list) * factor)
 
         self.conv_list = nn.ModuleList()
         self.conv_trans = nn.ModuleList()
@@ -261,14 +220,18 @@ class LSKmodule(nn.Module):
             self.conv_list.append(BasicNormConv(C_in=C_in, C_out=C_in,
                                                 kernel_size=kernel_list[i],
                                                 dilation=dilated_list[i],
+                                                norm=False,gelu=False,
                                                 dropout_rate=drop_out, groups=C_in))
             self.conv_trans.append(BasicNormConv(C_in=C_in, C_out=self.sub_Cout,
                                                  kernel_size=kernel_list[i],
+                                                 norm=False, gelu=False,
                                                  dropout_rate=drop_out))
 
         self.conv_squeeze = BasicNormConv(C_in=2, C_out=len(kernel_list),
+                                          norm=False, gelu=False,
                                           kernel_size=kernel_mid, dropout_rate=drop_out)
         self.conv_m = BasicNormConv(C_in=self.sub_Cout, C_out=C_in,
+                                    norm=False, gelu=False,
                                     kernel_size=1, dropout_rate=drop_out)
 
     def forward(self, x):
@@ -302,11 +265,11 @@ class LSKmodule(nn.Module):
 def LSK_test():
     print("LSK_test")
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-    C_in = 64
+    C_in = 128
     kernel_mid = 7
-    kernel_list = [5,7]
-    dilated_list = [1,3]
-    img_size = 256
+    kernel_list = [5,7,5,5]
+    dilated_list = [1,3,3,3]
+    img_size = 128
     # 清空GPU缓存并记录初始显存
     torch.cuda.empty_cache()
     initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
@@ -349,9 +312,8 @@ if __name__ == '__main__':
 
     # velocity_UNet_test()
     # ConditionalEmbedding_test()
-    COT_test()
     # attan_block_test()
-    # LSK_test()
+    LSK_test()
 
 
 # class velocity_UNet(nn.Module):
