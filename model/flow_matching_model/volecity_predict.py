@@ -60,35 +60,6 @@ class TimeEmbedding(nn.Module):
         # 5. 重塑为空间特征图 [B, 1, H, W]
         return emb.reshape(-1, 1, self.img_H, self.img_W)
 
-
-# 测试函数
-def test_TimeEmbedding():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    T = 1000
-    d_model = 128
-    img_H, img_W = 64, 64
-    batch_size = 8
-
-    # 创建连续时间嵌入模块
-    time_embedding = TimeEmbedding(T,d_model, img_H, img_W)
-    time_embedding.to(device)
-    # 生成连续时间输入 (范围[0,1])
-    t = torch.rand(batch_size).to(device) # 连续时间
-
-    # 前向传播
-    output = time_embedding(t)
-
-    print("输入时间形状:", t.shape)
-    print("输出嵌入形状:", output.shape)
-    print("输出范围: [{:.4f}, {:.4f}]".format(
-        output.min().item(), output.max().item()))
-
-    # 梯度测试
-    output.sum().backward()
-    print("梯度计算成功完成!")
-
-
-
 # 这个条件网络可以进行更改 将这个网络和UNet中的attn作类比网络
 class ConditionalEmbedding(nn.Module):
     # d_model 则是嵌入向量的维度
@@ -114,27 +85,7 @@ class ConditionalEmbedding(nn.Module):
 
         return out_map
 
-def ConditionalEmbedding_test():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    batch_size = 8
-    input_shape = [4,256,256]
-    output_shape = [64,64,64]
-    C_list = torch.tensor([64,64,64,128,128,128,128])
-    kernel_list = [3, 5, 7, 9]
-    dilated_list = [1, 1, 1, 1]
-    condition_map = torch.randn(batch_size, input_shape[0], input_shape[1], input_shape[2]).to(device)
-
-    net = ConditionalEmbedding(input_shape = input_shape,
-                               output_shape = output_shape,
-                               C_list = C_list,
-                               kernel_list = kernel_list,
-                               dilated_list = dilated_list).to(device)
-    output = net(condition_map)
-    print(f"Input shape: {condition_map.shape}")
-    print(f"Output shape: {output.shape}")
-
 #标准 注意力模块
-
 class AttnBlock(nn.Module):
     def __init__(self, in_ch):
         super(AttnBlock,self).__init__()
@@ -164,48 +115,6 @@ class AttnBlock(nn.Module):
         h = self.proj(h)
 
         return x + h
-
-
-
-
-
-def attan_block_test():
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-
-
-    # 清空GPU缓存并记录初始显存
-    torch.cuda.empty_cache()
-    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
-
-    print(f"初始显存占用: {initial_memory:.2f} MB")
-    C_in = 512
-    # 创建模拟输入
-    x = torch.randn(8, C_in, 32, 32).to(device)
-    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
-    print(f"输入张量显存占用: {input_memory:.2f} MB")
-
-    # 创建注意力块
-    attn_block = AttnBlock(in_ch=C_in).to(device)
-    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
-    print(f"模型参数显存占用: {model_memory:.2f} MB")
-
-    # 前向传播
-    output = attn_block(x)
-
-    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
-    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
-
-    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
-    print(f"总显存占用: {total_memory:.2f} MB")
-
-    print("Input shape:", x.shape)
-    print("Output shape:", output.shape)
-
-    # 峰值显存使用
-    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
-    print(f"峰值显存使用: {peak_memory:.2f} MB")
-
-    return output
 
 # COT模块
 class CoTAttention(nn.Module):
@@ -285,40 +194,107 @@ def COT_test():
 # LSKNet
 
 class LSKmodule(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, C_in, kernel_mid, kernel_list, dilated_list, drop_out=0):
         super().__init__()
-        self.conv0 = nn.Conv2d(dim, dim, 5, padding=2, groups=dim)
-        self.convl = nn.Conv2d(dim, dim, 7, stride=1, padding=9, groups=dim, dilation=3) # 应用padding使输入输出shape保持一致
-        self.conv0_s = nn.Conv2d(dim, dim // 2, 1)
-        self.conv1_s = nn.Conv2d(dim, dim // 2, 1)
-        self.conv_squeeze = nn.Conv2d(2, 2, 7, padding=3)
-        self.conv_m = nn.Conv2d(dim // 2, dim, 1)
+        if C_in % len(kernel_list) != 0:
+            raise ValueError(f"C_in ({C_in}) must be divisible by len(kernel_list)")
+        self.sub_Cout = int(C_in / len(kernel_list))
+
+        self.conv_list = nn.ModuleList()
+        self.conv_trans = nn.ModuleList()
+        for i in range(len(kernel_list)):
+            self.conv_list.append(BasicNormConv(C_in=C_in, C_out=C_in,
+                                                kernel_size=kernel_list[i],
+                                                dilation=dilated_list[i],
+                                                dropout_rate=drop_out, groups=C_in))
+            self.conv_trans.append(BasicNormConv(C_in=C_in, C_out=self.sub_Cout,
+                                                 kernel_size=kernel_list[i],
+                                                 dropout_rate=drop_out))
+
+        self.conv_squeeze = BasicNormConv(C_in=2, C_out=len(kernel_list),
+                                          kernel_size=kernel_mid, dropout_rate=drop_out)
+        self.conv_m = BasicNormConv(C_in=self.sub_Cout, C_out=C_in,
+                                    kernel_size=1, dropout_rate=drop_out)
 
     def forward(self, x):
         # x: (B,C,H,W)
+        attn_list = []
+        kernel_num = len(self.conv_list)
+        for i in range(kernel_num):
+            if i == 0:
+                attn_list.append(self.conv_list[i](x))
+            else:
+                attn_list.append(self.conv_list[i](attn_list[i - 1]))
 
-        # (k:卷积核尺寸,d:膨胀率)  将(23,1)分解为: (5,1) and (7,3)
-        attn1 = self.conv0(x)     # 应用第一个卷积层: (B,C,H,W)--> (B,C,H,W)
-        attn2 = self.convl(attn1) # 应用第二个卷积层: (B,C,H,W)--> (B,C,H,W)
+        for i in range(kernel_num):
+            attn_list[i] = self.conv_trans[i](attn_list[i])
 
-        attn1 = self.conv0_s(attn1)  # 应用1×1Conv建模通道间相关性,并将通道降维到C/2: (B,C,H,W)--> (B,C/2,H,W)   注意:如果分解为了三个卷积层,那就将通道C降维到C/3, 以便于在Concat的时候能恢复到原通道数量
-        attn2 = self.conv1_s(attn2)  # 应用1×1Conv建模通道间相关性,并将通道降维到C/2: (B,C,H,W)--> (B,C/2,H,W)   # 原文中并没有提出需要降维,应该是为了提高计算效率选择降维了
-
-        attn = torch.cat([attn1, attn2], dim=1)  # 将多个不同尺度的特征图在通道上进行拼接,恢复原通道数量: (B,C,H,W)
-        avg_attn = torch.mean(attn, dim=1, keepdim=True) # 应用全局平均池化: (B,C,H,W)-->(B,1,H,W)
-        max_attn, _ = torch.max(attn, dim=1, keepdim=True) # 应用全局最大池化: (B,C,H,W)-->(B,1,H,W)
+        attn = torch.cat(attn_list, dim=1)
+        avg_attn = torch.mean(attn, dim=1, keepdim=True)  # 应用全局平均池化: (B,C,H,W)-->(B,1,H,W)
+        max_attn, _ = torch.max(attn, dim=1, keepdim=True)  # 应用全局最大池化: (B,C,H,W)-->(B,1,H,W)
         agg = torch.cat([avg_attn, max_attn], dim=1)  # 将平均池化和最大池化特征进行拼接: (B,2,H,W)
         sig = self.conv_squeeze(agg).sigmoid()  # 将2个通道映射为N个通道, N是尺度的个数, 并通过sigmoid函数得到每个尺度对应的权重表示: (B,N,H,W), 在这里N==2
-        attn = attn1 * sig[:, 0, :, :].unsqueeze(1) + attn2 * sig[:, 1, :, :].unsqueeze(1) # 对多个尺度的信息进行加权求和: (B,C/2,H,W)
-        attn = self.conv_m(attn) # 将通道恢复为原通道数量: (B,C/2,H,W)-->(B,C,H,W)
-        return x * attn  # 最后与输入特征执行逐元素乘法
+
+        # 修正这里的语法错误
+        weighted_attn = 0
+        for i in range(kernel_num):
+            weighted_attn += attn_list[i] * sig[:, i:i + 1, :, :]  # 使用广播机制
+
+        weighted_attn = self.conv_m(weighted_attn)
+        return x * weighted_attn
+
 
 def LSK_test():
-    input = torch.randn(1, 512, 7, 7)
-    Model = LSKmodule(dim=512)
-    output = Model(input)
-    print(output.shape)
+    print("LSK_test")
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    C_in = 128
+    kernel_mid = 9
+    kernel_list = [3,5,7,9]
+    dilated_list = [1,1,3,1]
+    img_size = 128
+    # 清空GPU缓存并记录初始显存
+    torch.cuda.empty_cache()
+    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
+    print(f"初始显存占用: {initial_memory:.2f} MB")
 
+    # 创建输入张量（保持与COT测试相同的批量大小和空间维度）
+    input = torch.randn(16, C_in, img_size, img_size).to(device)
+    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
+    print(f"输入张量显存占用: {input_memory:.2f} MB")
+
+    # 创建模型
+    Model = LSKmodule(C_in, kernel_mid, kernel_list, dilated_list).to(device)
+    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
+    print(f"模型参数显存占用: {model_memory:.2f} MB")
+
+    # 前向传播
+    start_time = time.time()
+    output = Model(input)
+    forward_time = time.time() - start_time
+    print(f"前向传播时间: {forward_time:.4f} 秒")
+
+    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+
+    # 统计信息
+    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
+    print(f"总显存占用: {total_memory:.2f} MB")
+
+    # 峰值显存使用
+    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
+    print(f"峰值显存使用: {peak_memory:.2f} MB")
+
+    print("Input shape:", input.shape)
+    print("Output shape:", output.shape)
+
+    return output
+
+if __name__ == '__main__':
+    # test_TimeEmbedding()
+
+    # velocity_UNet_test()
+    # ConditionalEmbedding_test()
+    LSK_test()
 
 
 # class velocity_UNet(nn.Module):
@@ -443,12 +419,6 @@ def LSK_test():
 
 
 
-if __name__ == '__main__':
-    # test_TimeEmbedding()
-
-    # velocity_UNet_test()
-    # ConditionalEmbedding_test()
-    LSK_test()
 
 
     # #残差模块
