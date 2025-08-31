@@ -177,3 +177,5 @@ scheduler.py
 set PYTHONPATH=C:\Users\Administrator\Desktop\notebook\second_paper\radio_map_construction
 
 set PYTHONPATH=C:\Users\Administrator\Desktop\radiomap\radio_map_construction
+
+set PYTHONPATH=/home/code/radioMap

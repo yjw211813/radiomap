@@ -1,13 +1,9 @@
-
-import math
 import torch
 from torch import nn
-from torch.nn import init
 from torch.nn import functional as F
-from model.sub_block.top_conv import fractal_conv
 from model.sub_block.mid_conv import inception_ghost_sum
-from model.sub_block.lower_conv_block import multiScaleConvDown,MultiScaleUpSample
-
+from model.sub_block.low_conv import BasicNormConv
+import time
 
 class Swish(nn.Module):
     def forward(self, x):
@@ -214,54 +210,77 @@ def attan_block_test():
 # COT模块
 class CoTAttention(nn.Module):
 
-    def __init__(self, dim=512,kernel_size=3):
+    def __init__(self, C_in, kernel_size):
         super().__init__()
-        self.dim=dim
-        self.kernel_size=kernel_size
-
-        self.key_embed=nn.Sequential(
-            nn.Conv2d(dim,dim,kernel_size=kernel_size,padding=kernel_size//2,groups=4,bias=False),
-            nn.BatchNorm2d(dim),
-            nn.ReLU()
-        )
-        self.value_embed=nn.Sequential(
-            nn.Conv2d(dim,dim,1,bias=False),
-            nn.BatchNorm2d(dim)
-        )
-
-        factor=4
-        self.attention_embed=nn.Sequential(
-            nn.Conv2d(2*dim,2*dim//factor,1,bias=False),
-            nn.BatchNorm2d(2*dim//factor),
-            nn.ReLU(),
-            nn.Conv2d(2*dim//factor,kernel_size*kernel_size*dim,1)
-        )
-
+        factor = 4
+        C_mid = 2 * C_in // factor
+        self.C_in = C_in
+        self.kernel_size = kernel_size
+        self.key_embed =BasicNormConv(C_in=C_in, C_out=C_in, kernel_size=kernel_size, gelu=True, norm=True)
+        self.value_embed = BasicNormConv(C_in=C_in, C_out=C_in, kernel_size=1, gelu=False, norm=True)
+        self.attention_embed = nn.Sequential(BasicNormConv(C_in=2 * C_in, C_out=C_mid, kernel_size=1, gelu=True, norm=True),
+                                             BasicNormConv(C_in=C_mid, C_out=kernel_size * kernel_size * C_in, kernel_size=1,gelu=False, norm=False))
 
     def forward(self, x):
-        bs,c,h,w=x.shape
+        bs, c, h, w = x.shape
 
-        k1=self.key_embed(x)  # 编码静态上下文信息key,表示为k1: (B,C,H,W) --> (B,C,H,W)
-        v=self.value_embed(x).view(bs,c,-1)  # 编码value矩阵: (B,C,H,W) --> (B,C,H,W) --> (B,C,HW)
+        k1 = self.key_embed(x)  # 编码静态上下文信息key,表示为k1: (B,C,H,W) --> (B,C,H,W)
+        v = self.value_embed(x)  # 编码value矩阵: (B,C,H,W) --> (B,C,H,W)
 
-        y=torch.cat([k1,x],dim=1)  # 将上下文信息key和query在通道上进行拼接: (B,2C,H,W)
+        # 对value进行填充以便进行unfold操作
+        padding = (self.kernel_size - 1) // 2
+        v_padded = F.pad(v, (padding, padding, padding, padding), mode='constant', value=0)
+        v_unfold = F.unfold(v_padded, kernel_size=self.kernel_size)  # 形状: (B, C*k*k, H*W)
+        v_unfold = v_unfold.reshape(bs, c, self.kernel_size * self.kernel_size, h, w)  # 重塑为 (B, C, k*k, H, W)
 
-        att=self.attention_embed(y) # 通过两个连续的1×1卷积操作: (B,2C,H,W)-->(B,D,H,W)-->(B,C×k×k,H,W)   这里的C:把它看作是注意力头的个数
-        att=att.reshape(bs,c,self.kernel_size*self.kernel_size,h,w)  # (B,C×k×k,H,W) --> (B,C,k×k,H,W)
+        y = torch.cat([k1, x], dim=1)  # 将上下文信息key和query在通道上进行拼接: (B,2C,H,W)
 
-        # (B,C,k×k,H,W) --> (B,C,H,W) --> (B,C,HW)   每个坐标点在每个注意力头的的注意力矩阵为：k×k, 然后对窗口内的值取平均, 因此: (k×k,HW)-> (1,HW), 每个坐标点只有一个值 （忽略BC维度）
-        att=att.mean(2,keepdim=False).view(bs,c,-1)
-        # 对N=HW个坐标点(虽然每个坐标点现在只有一个值,但是是通过k×k窗口内的值共同获得的,利用了上下文信息),使用softmax求权重, 然后使用权重与Value相乘，生成动态上下文表示
-        k2=F.softmax(att,dim=-1)*v  # 得到动态上下文表示k2: (B,C,HW) * (B,C,HW) =  (B,C,HW)    权重*Value
-        k2=k2.view(bs,c,h,w)
+        att = self.attention_embed(y)  # 通过两个连续的1×1卷积操作: (B,2C,H,W)-->(B,D,H,W)-->(B,C×k×k,H,W)
+        att = att.reshape(bs, c, self.kernel_size * self.kernel_size, h, w)  # (B,C×k×k,H,W) --> (B,C,k×k,H,W)
 
-        return k1+k2
+        k2 = (v_unfold * att).sum(dim=2)  # 形状: (B, C, H, W)
+
+        return k1 + k2
 
 def COT_test():
-    input=torch.randn(1,512,7,7)
-    Model = CoTAttention(dim=512,kernel_size=3)
-    output=Model(input)
-    print(output.shape)
+    print("CoT_test")
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+
+    # 清空GPU缓存并记录初始显存
+    torch.cuda.empty_cache()
+    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
+    print(f"初始显存占用: {initial_memory:.2f} MB")
+    C_in = 128
+    # 创建输入张量
+    input = torch.randn(16, C_in, 128, 128).to(device)
+    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
+    print(f"输入张量显存占用: {input_memory:.2f} MB")
+
+    # 创建模型
+    Model = CoTAttention(C_in=C_in, kernel_size=7).to(device)
+    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
+    print(f"模型参数显存占用: {model_memory:.2f} MB")
+
+    # 前向传播
+    start_time = time.time()
+    output = Model(input)
+    unfold_time = time.time() - start_time
+    print(f"Unfold实现时间: {unfold_time:.4f} 秒")
+    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+
+    # 统计信息
+    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
+    print(f"总显存占用: {total_memory:.2f} MB")
+
+    # 峰值显存使用
+    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
+    print(f"峰值显存使用: {peak_memory:.2f} MB")
+
+    print("Input shape:", input.shape)
+    print("Output shape:", output.shape)
+
+    return output
 
 # LSKNet
 
@@ -429,7 +448,7 @@ if __name__ == '__main__':
 
     # velocity_UNet_test()
     # ConditionalEmbedding_test()
-    attan_block_test()
+    LSK_test()
 
 
     # #残差模块

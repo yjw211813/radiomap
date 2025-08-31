@@ -4,119 +4,6 @@ from torch.nn import functional as F
 
 
 
-class Conv3x3_DownSample(nn.Module):
-    def __init__(self, C):
-        super(Conv3x3_DownSample, self).__init__()
-        self.Down = nn.Sequential(
-            # 使用卷积进行2倍的下采样，通道数不变
-            nn.Conv2d(C, C, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(C),
-            nn.LeakyReLU()
-        )
-    def forward(self, x):
-        return self.Down(x)
-
-def Conv3x3_DownSample_test():
-    input_tensor = torch.randn(16, 16, 128, 128)
-    DownSamp_exm = Conv3x3_DownSample(16)
-    output_tensor = DownSamp_exm(input_tensor)
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
-
-class multiScaleConvDown(nn.Module):
-    def __init__(self, C, kernel_list):
-        super(multiScaleConvDown, self).__init__()
-        self.conv_list = nn.ModuleList()
-        for k in kernel_list:
-            # 计算padding以保证输出为输入的一半大小
-            padding = k // 2
-            self.conv_list.append(
-                nn.Conv2d(C, C, kernel_size=k, stride=2, padding=padding)
-            )
-
-    def forward(self, x, temb=None, cemb=None):
-        out = None
-        for conv in self.conv_list:
-            if out is None:
-                out = conv(x)
-            else:
-                out += conv(x)
-        return out
-
-def multiScaleConvDown_test():
-    input_tensor = torch.randn(16, 16, 128, 128)
-    kernel_list = [3, 5, 7, 9]
-    down_sample = multiScaleConvDown(16, kernel_list)
-    output_tensor = down_sample(input_tensor)
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
-    print(f"Number of convolutional layers: {len(down_sample.conv_list)}")
-
-
-class dialMultiScaleConvDown(nn.Module):
-    def __init__(self, C, kernel_list, dilation_list=None):
-        super(dialMultiScaleConvDown, self).__init__()
-        self.conv_list = nn.ModuleList()
-
-        # 如果没有提供dilation_list，则默认所有卷积不使用空洞卷积
-        if dilation_list is None:
-            dilation_list = [1] * len(kernel_list)
-        elif len(dilation_list) != len(kernel_list):
-            raise ValueError("dilation_list must have the same length as kernel_list")
-
-        for k, d in zip(kernel_list, dilation_list):
-            # 计算padding以保证输出为输入的一半大小
-            # 对于空洞卷积，实际感受野大小为: (k-1)*d + 1
-            # 因此padding需要设置为: ((k-1)*d + 1) // 2
-            effective_kernel_size = (k - 1) * d + 1
-            padding = effective_kernel_size // 2
-
-            self.conv_list.append(
-                nn.Conv2d(C, C, kernel_size=k, stride=2,
-                          padding=padding, dilation=d)
-            )
-
-    def forward(self, x, temb=None, cemb=None):
-        out = None
-        for conv in self.conv_list:
-            if out is None:
-                out = conv(x)
-            else:
-                out += conv(x)
-        return out
-
-
-def dialMultiScaleConvDown_test():
-    input_tensor = torch.randn(16, 16, 128, 128)
-
-    # 测试1: 不使用空洞卷积
-    kernel_list = [3, 5, 7, 9]
-    down_sample = dialMultiScaleConvDown(16, kernel_list)
-    output_tensor = down_sample(input_tensor)
-    print("Test 1 - No dilation:")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
-    print(f"Number of convolutional layers: {len(down_sample.conv_list)}")
-    print()
-
-    # 测试2: 使用空洞卷积
-    dilation_list = [2, 2, 2, 2]  # 所有卷积使用扩张率为2
-    down_sample_dila = dialMultiScaleConvDown(16, kernel_list, dilation_list)
-    output_tensor_dila = down_sample_dila(input_tensor)
-    print("Test 2 - With dilation:")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor_dila.shape}")
-    print(f"Number of convolutional layers: {len(down_sample_dila.conv_list)}")
-    print()
-
-    # 测试3: 混合扩张率
-    mixed_dilation_list = [1, 2, 3, 4]  # 不同的扩张率
-    down_sample_mixed = dialMultiScaleConvDown(16, kernel_list, mixed_dilation_list)
-    output_tensor_mixed = down_sample_mixed(input_tensor)
-    print("Test 3 - Mixed dilation:")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor_mixed.shape}")
-    print(f"Number of convolutional layers: {len(down_sample_mixed.conv_list)}")
 
 
 
@@ -132,19 +19,7 @@ class PixelShuffle_UpSam(nn.Module):
     def forward(self, x):
         return self.pixel_shuffle(x)
 
-def PixelShuffle_test():
 
-    batch_size = 12
-    channels = 4
-    height = 8
-    width = 8
-    upscale_factor = 2
-
-    x = torch.randn(batch_size, channels, height, width)
-    print("Input shape:", x.shape)
-    pixel_shuffle = PixelShuffle_UpSam(upscale_factor=upscale_factor)
-    output = pixel_shuffle(x)
-    print("Output shape:", output.shape)
 
 # 定义一个简单的ConvTranspose2d层
 class ConvTranspose_UpSam(nn.Module):
