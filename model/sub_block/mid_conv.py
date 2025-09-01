@@ -4,7 +4,7 @@ from sympy.strategies.core import switch
 import math
 from torch.nn import functional as F
 from model.sub_block.low_conv import GhostConv2D,BasicNormConv,dw_decompos_conv
-
+import time
 '''
     常用的卷积基础模块
 '''
@@ -178,6 +178,62 @@ class inception_ghost_sum(nn.Module):
         return output  # 在通道维度上拼接
 
 
+def inception_ghost_sum_test():
+    print("inception_ghost_sum_test")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # 示例参数
+    batch_size = 16  # 批次大小
+    channels = 4  # 通道数
+    img_H = 256  # 序列长度
+    img_W = 256  # 第三维度长度
+
+    kernel_list = [3, 5, 7, 9]
+    dilation_list = [1, 1, 1, 1]
+    C_out = 64
+
+    # 清空GPU缓存并记录初始显存
+    torch.cuda.empty_cache()
+    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
+    print(f"初始显存占用: {initial_memory:.2f} MB")
+
+    # 创建输入张量
+    x = torch.randn(batch_size, channels, img_H, img_W).to(device)
+    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
+    print(f"输入张量显存占用: {input_memory:.2f} MB")
+
+    # 创建模型
+    inception_module = inception_ghost_sum(
+        C_in=channels,
+        C_out=C_out,
+        kernel_list=kernel_list,
+        dilated_list=dilation_list
+    ).to(device)
+
+    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
+    print(f"模型参数显存占用: {model_memory:.2f} MB")
+
+    # 前向传播
+    start_time = time.time()
+    output_tensor = inception_module(x)
+    forward_time = time.time() - start_time
+    print(f"前向传播时间: {forward_time:.4f} 秒")
+
+    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+
+    # 统计信息
+    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
+    print(f"总显存占用: {total_memory:.2f} MB")
+
+    # 峰值显存使用
+    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
+    print(f"峰值显存使用: {peak_memory:.2f} MB")
+
+    print(f"Input shape: {x.shape}")
+    print(f"Output shape: {output_tensor.shape}")
+
+    return output_tensor
 class Inception_dwconv_cat(nn.Module):
     def __init__(self, C_in, C_out, kernel_list, dilated_list, drop_out=0.05):
         super(Inception_dwconv_cat, self).__init__()
@@ -205,23 +261,61 @@ class Inception_dwconv_cat(nn.Module):
 
 
 def Inception_dwconv_cat_test():
+    print("Inception_dwconv_cat_test")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # 示例参数
-    batch_size = 10  # 批次大小
+    batch_size = 16  # 批次大小
     channels = 4  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
+    img_H = 256  # 序列长度
+    img_W = 256  # 第三维度长度
 
-    kernel_list = [3, 5, 7, 9, 11]
-    dilation_list = [1, 2, 4, 8, 4]
-    C_out = 40
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
+    kernel_list = [3, 5, 7, 9]
+    dilation_list = [1, 1, 1, 1]
+    C_out = 64
 
-    inception_module = Inception_dwconv_cat(C_in=channels, C_out=C_out, kernel_list=kernel_list,
-                                           dilated_list=dilation_list)
+    # 清空GPU缓存并记录初始显存
+    torch.cuda.empty_cache()
+    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
+    print(f"初始显存占用: {initial_memory:.2f} MB")
+
+    # 创建输入张量
+    x = torch.randn(batch_size, channels, img_H, img_W).to(device)
+    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
+    print(f"输入张量显存占用: {input_memory:.2f} MB")
+
+    # 创建模型
+    inception_module = Inception_dwconv_cat(
+        C_in=channels,
+        C_out=C_out,
+        kernel_list=kernel_list,
+        dilated_list=dilation_list
+    ).to(device)
+
+    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
+    print(f"模型参数显存占用: {model_memory:.2f} MB")
+
+    # 前向传播
+    start_time = time.time()
     output_tensor = inception_module(x)
+    forward_time = time.time() - start_time
+    print(f"前向传播时间: {forward_time:.4f} 秒")
+
+    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+
+    # 统计信息
+    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
+    print(f"总显存占用: {total_memory:.2f} MB")
+
+    # 峰值显存使用
+    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
+    print(f"峰值显存使用: {peak_memory:.2f} MB")
+
     print(f"Input shape: {x.shape}")
     print(f"Output shape: {output_tensor.shape}")
 
+    return output_tensor
 
 
 class inception_dwconv_sum(nn.Module):
@@ -251,22 +345,61 @@ class inception_dwconv_sum(nn.Module):
 
 
 def inception_dwconv_sum_test():
+    print("inception_dwconv_sum_test")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # 示例参数
-    batch_size = 10  # 批次大小
+    batch_size = 16  # 批次大小
     channels = 4  # 通道数
-    img_H = 128  # 序列长度
-    img_W = 128  # 第三维度长度
+    img_H = 256  # 序列长度
+    img_W = 256  # 第三维度长度
 
-    kernel_list = [3, 5, 7, 9, 11]
-    dilation_list = [1, 2, 4, 8, 4]
-    C_out = 40
-    x = torch.randn(batch_size, channels, img_H, img_W)  # 随机生成输入数据
+    kernel_list = [3, 5, 7, 9]
+    dilation_list = [1, 1, 1, 1]
+    C_out = 64
 
-    inception_module = inception_dwconv_sum(C_in=channels, C_out=C_out, kernel_list=kernel_list,
-                                           dilated_list=dilation_list)
+    # 清空GPU缓存并记录初始显存
+    torch.cuda.empty_cache()
+    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
+    print(f"初始显存占用: {initial_memory:.2f} MB")
+
+    # 创建输入张量
+    x = torch.randn(batch_size, channels, img_H, img_W).to(device)
+    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
+    print(f"输入张量显存占用: {input_memory:.2f} MB")
+
+    # 创建模型
+    inception_module = inception_dwconv_sum(
+        C_in=channels,
+        C_out=C_out,
+        kernel_list=kernel_list,
+        dilated_list=dilation_list
+    ).to(device)
+
+    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
+    print(f"模型参数显存占用: {model_memory:.2f} MB")
+
+    # 前向传播
+    start_time = time.time()
     output_tensor = inception_module(x)
+    forward_time = time.time() - start_time
+    print(f"前向传播时间: {forward_time:.4f} 秒")
+
+    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+
+    # 统计信息
+    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
+    print(f"总显存占用: {total_memory:.2f} MB")
+
+    # 峰值显存使用
+    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
+    print(f"峰值显存使用: {peak_memory:.2f} MB")
+
     print(f"Input shape: {x.shape}")
     print(f"Output shape: {output_tensor.shape}")
+
+    return output_tensor
 
 
 
@@ -290,9 +423,10 @@ class res_incep(nn.Module):
 
 
 if __name__ == '__main__':
-    Inception_dwconv_cat_test()
-    inception_dwconv_sum_test()
-
-
+    # Inception_dwconv_cat_test()
+    # inception_dwconv_sum_test()
+    inception_ghost_sum_test()
+    # Inception_dwconv_cat_test()
+    # inception_dwconv_sum_test()
 
 

@@ -4,6 +4,10 @@ from torch.nn import functional as F
 from model.sub_block.mid_conv import inception_ghost_sum
 from model.sub_block.low_conv import BasicNormConv
 import time
+from model.sub_block.statistic_tools import gpu_statistic
+
+
+
 
 class Swish(nn.Module):
     def forward(self, x):
@@ -139,7 +143,7 @@ def attan_block_test():
 
     print(f"初始显存占用: {initial_memory:.2f} MB")
     C_in = 256
-    img_size = 64
+    img_size = 128
     # 创建模拟输入
     x = torch.randn(16, C_in, img_size, img_size).to(device)
     input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
@@ -173,7 +177,7 @@ def attan_block_test():
 class CoTAttention(nn.Module):
 
     def __init__(self, C_in, kernel_size):
-        super().__init__()
+        super(CoTAttention,self).__init__()
         factor = 4
         C_mid = 2 * C_in // factor
         self.C_in = C_in
@@ -207,9 +211,9 @@ class CoTAttention(nn.Module):
 # LSKNet
 # 输入 [B, C, H, W]
 # 输出 [B, C, H, W]
-class LSKmodule(nn.Module):
+class LSKNet(nn.Module):
     def __init__(self, C_in, kernel_mid, kernel_list, dilated_list, drop_out=0,factor = 2):
-        super().__init__()
+        super(LSKNet,self).__init__()
         if C_in % len(kernel_list) != 0:
             raise ValueError(f"C_in ({C_in}) must be divisible by len(kernel_list)")
         self.sub_Cout = int(C_in / len(kernel_list) * factor)
@@ -263,49 +267,197 @@ class LSKmodule(nn.Module):
 
 
 def LSK_test():
-    print("LSK_test")
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    get_gpu_info = gpu_statistic(device)
     C_in = 128
     kernel_mid = 7
     kernel_list = [5,7,5,5]
     dilated_list = [1,3,3,3]
     img_size = 128
-    # 清空GPU缓存并记录初始显存
-    torch.cuda.empty_cache()
-    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
-    print(f"初始显存占用: {initial_memory:.2f} MB")
+    x = torch.randn(16, C_in, img_size, img_size)
+    model = LSKNet(C_in, kernel_mid, kernel_list, dilated_list)
+    get_gpu_info.print_gpu_memory("LSK_test GPU info",x,model)
 
-    # 创建输入张量（保持与COT测试相同的批量大小和空间维度）
-    input = torch.randn(16, C_in, img_size, img_size).to(device)
-    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
-    print(f"输入张量显存占用: {input_memory:.2f} MB")
+#残差模块
+# 输入 x = [B, C_in, H, W] temb = [B, 1, H, W]
+# 输出 out = [B, C_out, H, W]
+class ResConv(nn.Module):
+    def __init__(self, C_in, C_out, conv_kernels,conv_dilats,drop_out=0.05, attn="Attn", LSK_kernels = [5,7,5,5], LSK_dilats = [1,3,3,3], LSK_mid_kernel = 7):
+        super().__init__()
+        self.conv_begin = inception_ghost_sum(C_in, C_out, conv_kernels, conv_dilats, drop_out)
+        self.conv_end = inception_ghost_sum(C_out, C_out, conv_kernels, conv_dilats, drop_out)
+        if C_in != C_out:
+            self.shortcut = BasicNormConv(C_in = C_in, C_out = C_out, kernel_size = 1,gelu=False,norm = False)
+        else:
+            self.shortcut = nn.Identity()
+        if attn == "LSKNet":
+            self.attn = LSKNet(C_out, kernel_mid = LSK_mid_kernel, kernel_list = LSK_kernels, dilated_list = LSK_dilats)
+        else:
+            self.attn = AttnBlock(C_out)
 
-    # 创建模型
-    Model = LSKmodule(C_in, kernel_mid, kernel_list, dilated_list).to(device)
-    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
-    print(f"模型参数显存占用: {model_memory:.2f} MB")
+    def forward(self, x, temb):
+        out =self.conv_end( self.conv_begin(x) + temb)
+        out = self.attn(out + self.shortcut(x))
+        return out
 
-    # 前向传播
-    start_time = time.time()
-    output = Model(input)
-    forward_time = time.time() - start_time
-    print(f"前向传播时间: {forward_time:.4f} 秒")
+def ResConv_test():
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    get_gpu_info = gpu_statistic(device)
+    C_in = 4
+    C_out = 64
 
-    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
-    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+    conv_kernels = [3,5,7,9]
+    conv_dilats = [1,1,1,1]
+    LSK_kernels = [5,7,5,5]
+    LSK_dilats = [1,3,3,3]
 
-    # 统计信息
-    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
-    print(f"总显存占用: {total_memory:.2f} MB")
+    LSK_mid_kernel = 7
+    img_size = 256
+    x = torch.randn(16, C_in, img_size, img_size)
+    temb = torch.randn(16, 1, img_size, img_size)
+    model = ResConv(C_in = C_in,C_out = C_out,
+                    conv_kernels = conv_kernels,
+                    conv_dilats = conv_dilats,
+                    attn="LSKNet",
+                    LSK_kernels = LSK_kernels,
+                    LSK_dilats = LSK_dilats,
+                    LSK_mid_kernel = LSK_mid_kernel)
+    get_gpu_info.print_gpu_memory("ResConv LSKNet GPU info",x,model,temb = temb)
+    img_size = 64
+    C_in = 256
+    C_out = 512
+    x = torch.randn(16, C_in, img_size, img_size)
+    temb = torch.randn(16, 1, img_size, img_size)
+    model = ResConv(C_in=C_in, C_out=C_out,
+                    conv_kernels=conv_kernels,
+                    conv_dilats=conv_dilats)
+    get_gpu_info.print_gpu_memory("ResConv Attn GPU info",x,model,temb = temb)
 
-    # 峰值显存使用
-    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
-    print(f"峰值显存使用: {peak_memory:.2f} MB")
+class velocity_UNet(nn.Module):
+    # 修改上卷积方法
+    def __init__(self, T, input_shape, output_shape, C_down_list,attn_params):
+        super(velocity_UNet, self).__init__()
+        tdim = max(C_down_list) * 4
 
-    print("Input shape:", input.shape)
-    print("Output shape:", output.shape)
+        self.input_channel, self.input_H, self.input_W = input_shape
+        self.output_channel, _, _ = output_shape
+        kernel_sizes = [3, 5, 7, 9]
+        convDownKernel_list = [3, 5, 7]
+        convUpKernel_list = [3, 5, 7]
+        # 创建下采样路径（编码器）
+        self.encoder = nn.ModuleList()
+        in_ch = self.input_channel
+        for out_ch in C_down_list:
+            self.encoder.append(nn.Sequential(
+                multi_scale_block2D(C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_num=2),
+                multiScaleConvDown(out_ch,convDownKernel_list)
+            ))
+            in_ch = out_ch
 
-    return output
+        # 中心卷积层
+        self.conv_center = Fractal_multi_scale2D(input_channel=C_down_list[-1],output_channel=C_down_list[-1])
+
+        # 创建上采样路径（解码器）
+        self.decodes = nn.ModuleList()
+        for i in range(len(C_down_list), 0, -1):
+            i = i -1
+            self.decodes.append(
+                nn.Sequential(
+                    multi_scale_block2D(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes,dilated_num=1),
+                    MultiScaleUpSample(C_down_list[i],convUpKernel_list)
+                )
+            )
+        # 创建注意力模块
+        self.attentions = nn.ModuleList()
+        self.TimeEmbeddings = nn.ModuleList()
+        attn_channels = [
+            C_down_list[2] // 4,  # 对应第4层
+            C_down_list[1] // 4,  # 对应第3层
+            C_down_list[0] // 4,  # 对应第2层
+            C_down_list[0] // 4  # 对应第1层
+        ]
+        attn_factors = [8, 4, 2, 1]  # 空间尺寸缩小因子
+        self.repeat_factors = [4,4,4,2]
+        for ch, factor, param in zip(attn_channels, attn_factors, attn_params):
+            self.attentions.append(ConditionalEmbedding(
+                input_shape,
+                [ch, self.input_H // factor, self.input_W // factor],
+                param
+            ))
+            self.TimeEmbeddings.append(TimeEmbedding(T, tdim, self.input_H // factor, self.input_W // factor))
+
+        # 输出层
+        now_ch = C_down_list[0] // 2
+        self.tail = nn.Sequential(
+            nn.GroupNorm(now_ch // 4, now_ch),
+            Swish(),
+            nn.Conv2d(now_ch, self.output_channel, 3, stride=1, padding=1)
+        )
+
+    def forward(self, x_t, t, condition_info):
+        # 解码器路径
+        attn_outputs = []
+        time_outputs = []
+        x_in = torch.cat([x_t, condition_info], dim=1)
+        for i in range(len(self.attentions)):
+            attn_outputs.append(self.attentions[i](x_in).repeat(1, self.repeat_factors[i], 1, 1))
+        for i in range(len(self.TimeEmbeddings)):
+            time_outputs.append(self.TimeEmbeddings[i](t))
+        # 编码器路径
+        encoder_outs = []
+        for layer in self.encoder:
+            x_in = layer(x_in)
+            encoder_outs.append(x_in)
+
+        # 中心处理
+        down4_out = encoder_outs[-1]
+        center_out = self.conv_center(down4_out)
+        x = torch.cat([center_out, down4_out], dim=1)
+
+        for i in range(len(self.decodes)):
+            # 上采样卷积
+            x = self.decodes[i](x)
+            # 应用注意力机制
+            x = x + attn_outputs[i] + time_outputs[i]
+            # 跳跃连接（拼接编码器特征）
+            skip_idx = len(encoder_outs) - 2 - i
+            if skip_idx >= 0:
+                x = torch.cat([x, encoder_outs[skip_idx]], dim=1)
+
+        # 最终输出层
+        return self.tail(x * attn_outputs[-1])
+
+    def load_weights(self, checkpoint_path):
+        """加载预训练权重"""
+        self.load_state_dict(torch.load(checkpoint_path, weights_only=True))
+        print(f"Loaded weights from {checkpoint_path}")
+
+
+
+def velocity_UNet_test():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(device)
+    batch_size = 8
+    T = 1000
+    img_H = 256
+    img_W = 256
+    condition_info = torch.randn(batch_size, 4, img_H, img_W).to(device)
+    x_t = torch.randn(batch_size, 1, img_H, img_W).to(device)
+    t = torch.rand(batch_size).to(device)
+    BTM_ghost_UNet_input_shape = [condition_info.shape[1]+1, condition_info.shape[2], condition_info.shape[3]]
+    BTM_ghost_UNet_output_shape = [1, condition_info.shape[2], condition_info.shape[3]]
+    C_down_list = [64, 128, 256, 512]
+    C_list_attn = torch.tensor([64, 64, 128, 128, 128])
+    attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
+    net = velocity_UNet(T,BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
+    output = net(x_t, t, condition_info)
+    print(f"Output shape: {output.shape}")
+
+
+
+
+
+
 
 if __name__ == '__main__':
     # test_TimeEmbedding()
@@ -313,178 +465,12 @@ if __name__ == '__main__':
     # velocity_UNet_test()
     # ConditionalEmbedding_test()
     # attan_block_test()
-    LSK_test()
-
-
-# class velocity_UNet(nn.Module):
-#     # 修改上卷积方法
-#     def __init__(self, T, input_shape, output_shape, C_down_list,attn_params):
-#         super(velocity_UNet, self).__init__()
-#         tdim = max(C_down_list) * 4
-#
-#         self.input_channel, self.input_H, self.input_W = input_shape
-#         self.output_channel, _, _ = output_shape
-#         kernel_sizes = [3, 5, 7, 9]
-#         convDownKernel_list = [3, 5, 7]
-#         convUpKernel_list = [3, 5, 7]
-#         # 创建下采样路径（编码器）
-#         self.encoder = nn.ModuleList()
-#         in_ch = self.input_channel
-#         for out_ch in C_down_list:
-#             self.encoder.append(nn.Sequential(
-#                 multi_scale_block2D(C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_num=2),
-#                 multiScaleConvDown(out_ch,convDownKernel_list)
-#             ))
-#             in_ch = out_ch
-#
-#         # 中心卷积层
-#         self.conv_center = Fractal_multi_scale2D(input_channel=C_down_list[-1],output_channel=C_down_list[-1])
-#
-#         # 创建上采样路径（解码器）
-#         self.decodes = nn.ModuleList()
-#         for i in range(len(C_down_list), 0, -1):
-#             i = i -1
-#             self.decodes.append(
-#                 nn.Sequential(
-#                     multi_scale_block2D(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes,dilated_num=1),
-#                     MultiScaleUpSample(C_down_list[i],convUpKernel_list)
-#                 )
-#             )
-#         # 创建注意力模块
-#         self.attentions = nn.ModuleList()
-#         self.TimeEmbeddings = nn.ModuleList()
-#         attn_channels = [
-#             C_down_list[2] // 4,  # 对应第4层
-#             C_down_list[1] // 4,  # 对应第3层
-#             C_down_list[0] // 4,  # 对应第2层
-#             C_down_list[0] // 4  # 对应第1层
-#         ]
-#         attn_factors = [8, 4, 2, 1]  # 空间尺寸缩小因子
-#         self.repeat_factors = [4,4,4,2]
-#         for ch, factor, param in zip(attn_channels, attn_factors, attn_params):
-#             self.attentions.append(ConditionalEmbedding(
-#                 input_shape,
-#                 [ch, self.input_H // factor, self.input_W // factor],
-#                 param
-#             ))
-#             self.TimeEmbeddings.append(TimeEmbedding(T, tdim, self.input_H // factor, self.input_W // factor))
-#
-#         # 输出层
-#         now_ch = C_down_list[0] // 2
-#         self.tail = nn.Sequential(
-#             nn.GroupNorm(now_ch // 4, now_ch),
-#             Swish(),
-#             nn.Conv2d(now_ch, self.output_channel, 3, stride=1, padding=1)
-#         )
-#
-#     def forward(self, x_t, t, condition_info):
-#         # 解码器路径
-#         attn_outputs = []
-#         time_outputs = []
-#         x_in = torch.cat([x_t, condition_info], dim=1)
-#         for i in range(len(self.attentions)):
-#             attn_outputs.append(self.attentions[i](x_in).repeat(1, self.repeat_factors[i], 1, 1))
-#         for i in range(len(self.TimeEmbeddings)):
-#             time_outputs.append(self.TimeEmbeddings[i](t))
-#         # 编码器路径
-#         encoder_outs = []
-#         for layer in self.encoder:
-#             x_in = layer(x_in)
-#             encoder_outs.append(x_in)
-#
-#         # 中心处理
-#         down4_out = encoder_outs[-1]
-#         center_out = self.conv_center(down4_out)
-#         x = torch.cat([center_out, down4_out], dim=1)
-#
-#         for i in range(len(self.decodes)):
-#             # 上采样卷积
-#             x = self.decodes[i](x)
-#             # 应用注意力机制
-#             x = x + attn_outputs[i] + time_outputs[i]
-#             # 跳跃连接（拼接编码器特征）
-#             skip_idx = len(encoder_outs) - 2 - i
-#             if skip_idx >= 0:
-#                 x = torch.cat([x, encoder_outs[skip_idx]], dim=1)
-#
-#         # 最终输出层
-#         return self.tail(x * attn_outputs[-1])
-#
-#     def load_weights(self, checkpoint_path):
-#         """加载预训练权重"""
-#         self.load_state_dict(torch.load(checkpoint_path, weights_only=True))
-#         print(f"Loaded weights from {checkpoint_path}")
-#
-#
-#
-# def velocity_UNet_test():
-#     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#     print(device)
-#     batch_size = 8
-#     T = 1000
-#     img_H = 256
-#     img_W = 256
-#     condition_info = torch.randn(batch_size, 4, img_H, img_W).to(device)
-#     x_t = torch.randn(batch_size, 1, img_H, img_W).to(device)
-#     t = torch.rand(batch_size).to(device)
-#     BTM_ghost_UNet_input_shape = [condition_info.shape[1]+1, condition_info.shape[2], condition_info.shape[3]]
-#     BTM_ghost_UNet_output_shape = [1, condition_info.shape[2], condition_info.shape[3]]
-#     C_down_list = [64, 128, 256, 512]
-#     C_list_attn = torch.tensor([64, 64, 128, 128, 128])
-#     attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-#     net = velocity_UNet(T,BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
-#     output = net(x_t, t, condition_info)
-#     print(f"Output shape: {output.shape}")
+    # LSK_test()
+    # LSK_test()
+    ResConv_test()
 
 
 
-
-
-    # #残差模块
-    #
-    # class ResBlock(nn.Module):
-    #     def __init__(self, in_ch, out_ch, tdim, dropout, attn=True):
-    #         super().__init__()
-    #         self.block1 = nn.Sequential(
-    #             nn.GroupNorm(32, in_ch),
-    #             Swish(),
-    #             nn.Conv2d(in_ch, out_ch, 3, stride=1, padding=1),
-    #         )
-    #         self.temb_proj = nn.Sequential(
-    #             Swish(),
-    #             nn.Linear(tdim, out_ch),
-    #         )
-    #         self.cond_proj = nn.Sequential(
-    #             Swish(),
-    #             nn.Linear(tdim, out_ch),
-    #         )
-    #         self.block2 = nn.Sequential(
-    #             nn.GroupNorm(32, out_ch),
-    #             Swish(),
-    #             nn.Dropout(dropout),
-    #             nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1),
-    #         )
-    #         if in_ch != out_ch:
-    #             self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=1, padding=0)
-    #         else:
-    #             self.shortcut = nn.Identity()
-    #         if attn:
-    #             self.attn = AttnBlock(out_ch)
-    #         else:
-    #             self.attn = nn.Identity()
-    #
-    #
-    #     def forward(self, x, temb, labels):
-    #         h = self.block1(x)
-    #         h += self.temb_proj(temb)[:, :, None, None]
-    #         h += self.cond_proj(labels)[:, :, None, None]
-    #         h = self.block2(h)
-    #
-    #         h = h + self.shortcut(x)
-    #         h = self.attn(h)
-    #         return h
-    #
-    #
     # class UNet(nn.Module):
     #     def __init__(self, T, num_labels, ch, ch_mult, num_res_blocks, dropout):
     #         super().__init__()

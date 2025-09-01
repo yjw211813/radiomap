@@ -7,7 +7,7 @@ from model.sub_block.low_conv import BasicNormConv,PyramidConvCompress,dw_decomp
 from model.sub_block.mid_conv import Inception_group_cat,inception_group_sum,inception_ghost_sum,inception_sum,Inception_cat,Inception_ghost_cat
 from model.sub_block.mid_conv import res_incep,channel_shuffle
 from torch.nn import functional as F
-
+import time
 
 
 '''
@@ -97,6 +97,54 @@ class SK_Channel_atten2D(nn.Module):
         return final_output
 
 
+def SK_Channel_atten2D_test():
+    print("SK_Channel_atten2D_test")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # 测试参数
+    img_size = 256
+    C_in = 4
+    C_out = 64
+    kernel_sizes = [3, 5, 7, 9]
+    dilated_list = [1, 1, 1, 1]
+
+    # 清空GPU缓存并记录初始显存
+    torch.cuda.empty_cache()
+    initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
+    print(f"初始显存占用: {initial_memory:.2f} MB")
+
+    # 创建输入张量
+    x = torch.randn(16, C_in, img_size, img_size).to(device)
+    input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
+    print(f"输入张量显存占用: {input_memory:.2f} MB")
+
+    # 创建模型
+    model = SK_Channel_atten2D(img_size, C_in, C_out, kernel_sizes, dilated_list).to(device)
+    model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
+    print(f"模型参数显存占用: {model_memory:.2f} MB")
+
+    # 前向传播
+    start_time = time.time()
+    output = model(x)
+    forward_time = time.time() - start_time
+    print(f"前向传播时间: {forward_time:.4f} 秒")
+
+    forward_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+    print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+
+    # 统计信息
+    total_memory = torch.cuda.memory_allocated(device) / 1024 ** 2
+    print(f"总显存占用: {total_memory:.2f} MB")
+
+    # 峰值显存使用
+    peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
+    print(f"峰值显存使用: {peak_memory:.2f} MB")
+
+    print("Input shape:", x.shape)
+    print("Output shape:", output.shape)
+
+    return output
+
 class conv_mixer(nn.Module):
     def __init__(self,input_channel,conv_mode,kernel_size,dilate):
         super(conv_mixer, self).__init__()
@@ -171,6 +219,91 @@ class fractal_conv(nn.Module):
         result = torch.cat([left_out,mid_out2,right8out, right7out], 1)  # 在通道维度上拼接
 
         return result
+
+
+def fractal_conv_test():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # 示例参数
+    batch_size = 16
+    channels = 512
+    img_H = 16
+    img_W = 16
+    kernel_list = [3, 5, 7, 9]
+    dilated_list = [1, 1, 1, 1]
+    C_out = 512
+
+    # 创建测试输入
+    x = torch.randn(batch_size, channels, img_H, img_W).to(device)
+
+    # 要测试的模块列表
+    inception_modules = [
+        Inception_group_cat,
+        inception_sum,
+        inception_ghost_sum,
+        Inception_cat,
+        Inception_ghost_cat
+    ]
+
+    # 模块名称列表（用于输出）
+    module_names = [
+        "Inception_group_cat",
+        "inception_sum",
+        "inception_ghost_sum",
+        "Inception_cat",
+        "Inception_ghost_cat"
+    ]
+
+    print("开始测试各种 Inception 模块...")
+    print(f"输入形状: {x.shape}")
+    print("-" * 80)
+
+    # 循环测试每个模块
+    for i, (module_class, module_name) in enumerate(zip(inception_modules, module_names)):
+        try:
+            print(f"测试 {i + 1}/{len(inception_modules)}: {module_name}")
+
+            # 清空GPU缓存并记录初始显存
+            torch.cuda.empty_cache()
+            initial_memory = torch.cuda.memory_allocated(device) / 1024 ** 2  # MB
+            input_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory
+            print(f"  输入张量显存占用: {input_memory:.2f} MB")
+
+            # 创建残差块
+            residual_block = fractal_conv(
+                C_in=channels,
+                C_out=C_out,
+                kernel_list=kernel_list,
+                dilated_list=dilated_list,
+                inception_module=module_class
+            ).to(device)
+
+            model_memory = torch.cuda.memory_allocated(device) / 1024 ** 2 - initial_memory - input_memory
+            print(f"  模型参数显存占用: {model_memory:.2f} MB")
+
+            # 前向传播
+            start_time = time.time()
+            output_tensor = residual_block(x)
+            forward_time = time.time() - start_time
+
+            forward_memory = torch.cuda.memory_allocated(
+                device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+            print(f"  前向传播时间: {forward_time:.4f} 秒")
+            print(f"  前向传播中间变量显存占用: {forward_memory:.2f} MB")
+
+            # 峰值显存使用
+            peak_memory = torch.cuda.max_memory_allocated(device) / 1024 ** 2
+            print(f"  峰值显存使用: {peak_memory:.2f} MB")
+
+            # 打印结果
+            print(f"  输出形状: {output_tensor.shape}")
+            print(f"  测试通过 ✓")
+            print("-" * 50)
+
+        except Exception as e:
+            print(f"测试 {module_name} 时出错: {e}")
+            print("-" * 50)
+
 
 class res_incep_ghost_sum(res_incep):
     def __init__(self, C_in, C_out, kernel_list, dilated_list):
@@ -374,6 +507,6 @@ class MSAA_channel_space(nn.Module):
 
 
 if __name__ == '__main__':
-
-
+    # SK_Channel_atten2D_test()
     print(1)
+    fractal_conv_test()

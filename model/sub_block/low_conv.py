@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import math
 from torch.nn import functional as F
-
+from model.sub_block.statistic_tools import gpu_statistic
 
 # deepseek 推荐先 BatchNorm2d 再进行 GELU
 class Swish_act(nn.Module):
@@ -173,11 +173,13 @@ class Conv3x3_DownSample(nn.Module):
         return self.Down(x)
 
 def Conv3x3_DownSample_test():
-    input_tensor = torch.randn(16, 16, 128, 128)
-    DownSamp_exm = Conv3x3_DownSample(16)
-    output_tensor = DownSamp_exm(input_tensor)
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    get_gpu_info = gpu_statistic(device)
+    x = torch.randn(16, 16, 128, 128)
+    model = Conv3x3_DownSample(16)
+    get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info",x,model)
+
+
 
 class Conv_DownSampling2D(nn.Module):
     def __init__(self, C):
@@ -214,13 +216,14 @@ class multiScaleConvDown(nn.Module):
         return out
 
 def multiScaleConvDown_test():
-    input_tensor = torch.randn(16, 16, 128, 128)
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    get_gpu_info = gpu_statistic(device)
+    x = torch.randn(16, 16, 128, 128)
     kernel_list = [3, 5, 7, 9]
-    down_sample = multiScaleConvDown(16, kernel_list)
-    output_tensor = down_sample(input_tensor)
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
-    print(f"Number of convolutional layers: {len(down_sample.conv_list)}")
+    model = multiScaleConvDown(16, kernel_list)
+    get_gpu_info.print_gpu_memory("multiScaleConvDown GPU info",x,model)
+
+
 
 class Dila_DownSampling2D(nn.Module):
     def __init__(self, C):
@@ -235,7 +238,6 @@ class Dila_DownSampling2D(nn.Module):
 
     def forward(self, x):
         return self.Down(x)
-
 
 class dialMultiScaleConvDown(nn.Module):
     def __init__(self, C, kernel_list, dilation_list=None):
@@ -271,37 +273,19 @@ class dialMultiScaleConvDown(nn.Module):
 
 
 def dialMultiScaleConvDown_test():
-    input_tensor = torch.randn(16, 16, 128, 128)
-
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    x = torch.randn(16, 16, 128, 128)
+    get_gpu_info = gpu_statistic(device)
     # 测试1: 不使用空洞卷积
     kernel_list = [3, 5, 7, 9]
-    down_sample = dialMultiScaleConvDown(16, kernel_list)
-    output_tensor = down_sample(input_tensor)
-    print("Test 1 - No dilation:")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor.shape}")
-    print(f"Number of convolutional layers: {len(down_sample.conv_list)}")
-    print()
+    model = dialMultiScaleConvDown(16, kernel_list)
+
+    get_gpu_info.print_gpu_memory("dialMultiScaleConvDown GPU info [3, 5, 7, 9]", x, model)
 
     # 测试2: 使用空洞卷积
     dilation_list = [2, 2, 2, 2]  # 所有卷积使用扩张率为2
-    down_sample_dila = dialMultiScaleConvDown(16, kernel_list, dilation_list)
-    output_tensor_dila = down_sample_dila(input_tensor)
-    print("Test 2 - With dilation:")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor_dila.shape}")
-    print(f"Number of convolutional layers: {len(down_sample_dila.conv_list)}")
-    print()
-
-    # 测试3: 混合扩张率
-    mixed_dilation_list = [1, 2, 3, 4]  # 不同的扩张率
-    down_sample_mixed = dialMultiScaleConvDown(16, kernel_list, mixed_dilation_list)
-    output_tensor_mixed = down_sample_mixed(input_tensor)
-    print("Test 3 - Mixed dilation:")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output_tensor_mixed.shape}")
-    print(f"Number of convolutional layers: {len(down_sample_mixed.conv_list)}")
-
+    model = dialMultiScaleConvDown(16, kernel_list, dilation_list)
+    get_gpu_info.print_gpu_memory("dialMultiScaleConvDown GPU info  dilation_list = [2, 2, 2, 2]", x, model)
 
 
 
@@ -316,7 +300,8 @@ class PixelShuffle_UpSam(nn.Module):
         return self.pixel_shuffle(x)
 
 def PixelShuffle_test():
-
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    get_gpu_info = gpu_statistic(device)
     batch_size = 12
     channels = 4
     height = 8
@@ -324,10 +309,9 @@ def PixelShuffle_test():
     upscale_factor = 2
 
     x = torch.randn(batch_size, channels, height, width)
-    print("Input shape:", x.shape)
-    pixel_shuffle = PixelShuffle_UpSam(upscale_factor=upscale_factor)
-    output = pixel_shuffle(x)
-    print("Output shape:", output.shape)
+    model = PixelShuffle_UpSam(upscale_factor=upscale_factor)
+    get_gpu_info.print_gpu_memory("PixelShuffle GPU info  dilation_list = [2, 2, 2, 2]", x, model)
+
 
 # 定义一个简单的ConvTranspose2d层
 class ConvTranspose_UpSam(nn.Module):
@@ -390,3 +374,8 @@ def multiScaleUpSample_test():
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output_tensor.shape}")
 
+if __name__ == "__main__":
+    Conv3x3_DownSample_test()
+    multiScaleConvDown_test()
+    dialMultiScaleConvDown_test()
+    PixelShuffle_test()
