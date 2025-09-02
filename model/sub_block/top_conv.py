@@ -490,6 +490,31 @@ class MSAA_space_channel(nn.Module):
         out_channel = self.channel_atten(out_space)*out_space
         return out_channel
 
+def MSAA_space_atten_test():
+    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    batch_size = 8
+    channels = 64
+    img_H = 64
+    img_W = 64
+
+    # 测试包含恒等层的情况（kernel_list中包含0）
+
+    kernel_list = [3, 5, 7]  # 包含恒等层
+    dilated_list = [1, 1, 1]
+
+    x = torch.randn(batch_size, channels, img_H, img_W).to(device)
+    model = MSAA_space_atten(
+        C_in=channels,
+        space_pool_kernel=7,
+        kernel_list=kernel_list,
+        dilated_list=dilated_list
+    ).to(device)
+
+    output = model(x)
+    print("Input shape:", x.shape)
+    print("Output shape:", output.shape)
+    assert output.shape == x.shape, "Output shape should match input shape"
+
 class MSAA_channel_space(nn.Module):
     def __init__(self, C_in,img_size, kernel_list, dilated_list):
         super(MSAA_channel_space, self).__init__()

@@ -336,9 +336,9 @@ def ConvTranspose_test():
     print("Output shape:", output.shape)
 
 
-class MultiScaleUpSample(nn.Module):
+class multiScaleUpSample(nn.Module):
     def __init__(self, in_ch, kernel_list):
-        super(MultiScaleUpSample, self).__init__()
+        super(multiScaleUpSample, self).__init__()
         # Initialize ModuleList for transposed convolutions
         self.t_ups = nn.ModuleList()
         for kernel_size in kernel_list:
@@ -369,7 +369,7 @@ class MultiScaleUpSample(nn.Module):
 def multiScaleUpSample_test():
     input_tensor = torch.randn(16, 16, 64, 64)
     kernel_list = [3, 5, 7]
-    up_sample = MultiScaleUpSample(16, kernel_list)
+    up_sample = multiScaleUpSample(16, kernel_list)
     output_tensor = up_sample(input_tensor)
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output_tensor.shape}")

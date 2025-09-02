@@ -2,12 +2,10 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from model.sub_block.mid_conv import inception_ghost_sum
-from model.sub_block.low_conv import BasicNormConv,multiScaleConvDown
+from model.sub_block.low_conv import BasicNormConv,multiScaleConvDown,multiScaleUpSample
+from model.sub_block.top_conv import fractal_conv,inception_sum,MSAA_space_atten
 import time
 from model.sub_block.statistic_tools import gpu_statistic
-
-
-
 
 class Swish(nn.Module):
     def forward(self, x):
@@ -336,63 +334,382 @@ def ResConv_test():
 #     LSK_kernels = [5,7,5,5]
 #     LSK_dilats = [1,3,3,3]
 #     LSK_mid_kernel = 7
+#     T 为总步长
 # convDownKernels = [3, 5, 7] convUpKernels = [3,5,7]
 class velocity_UNet(nn.Module):
     def __init__(self, net_info_dict):
+        """
+        速度场UNet网络模型
+        
+        参数:
+            net_info_dict (dict): 包含网络配置信息的字典
+        """
         super(velocity_UNet, self).__init__()
-        self.encoder_conv_list = nn.ModuleList()
+
+        # 初始化输入参数
+        self.input_channel = net_info_dict["in_shape"][1]  # 输入通道数
+        self.input_H = net_info_dict["in_shape"][2]  # 输入高度
+        self.input_W = net_info_dict["in_shape"][3]  # 输入宽度
+
+        # 编码器部分
+        self.encoder_conv_list = nn.ModuleList()  # 编码器卷积层列表
+        self.encoder_down_list = nn.ModuleList()  # 编码器下采样层列表
+        
         C_in = self.input_channel
-        self.resconv_down_list = nn.ModuleList()
-        self.down_list = nn.ModuleList()
-        for C_out in net_info_dict["C_lsit"]:
-            self.resconv_down_list.append(ResConv(C_in=C_in, C_out=C_out,
-                conv_kernels=net_info_dict["conv_kernels"],
-                conv_dilats=net_info_dict["conv_dilats"],
-                attn="LSKNet",
-                LSK_kernels=net_info_dict["LSK_kernels"],
-                LSK_dilats=net_info_dict["LSK_dilats"],
-                LSK_mid_kernel=net_info_dict["LSK_mid_kernel"]))
-
-            self.down_list.append(multiScaleConvDown(C = C_out,kernel_list = net_info_dict["convDownKernels"]))
-            C_in = C_out
-
-
-        C_in = net_info_dict["input_shape"][1]
-        C_out = net_info_dict["C_lsit"][0]
-
-        self.conv_begin =  ResConv(C_in=C_in, C_out=C_out,
-                conv_kernels=net_info_dict["conv_kernels"],
-                conv_dilats=net_info_dict["conv_dilats"],
-                attn="LSKNet",
-                LSK_kernels=net_info_dict["LSK_kernels"],
-                LSK_dilats=net_info_dict["LSK_dilats"],
-                LSK_mid_kernel=net_info_dict["LSK_mid_kernel"])
-        self.convDown_begin = multiScaleConvDown(C = C_out,kernel_list = net_info_dict["convDownKernels"])
-
-        C_in = net_info_dict["C_lsit"][0]
-        C_out = net_info_dict["C_lsit"][1]
-
-        self.conv_1 = ResConv(C_in=C_in, C_out=C_out,
-                                  conv_kernels=net_info_dict["conv_kernels"],
-                                  conv_dilats=net_info_dict["conv_dilats"],
-                                  attn="LSKNet",
-                                  LSK_kernels=net_info_dict["LSK_kernels"],
-                                  LSK_dilats=net_info_dict["LSK_dilats"],
-                                  LSK_mid_kernel=net_info_dict["LSK_mid_kernel"])
-        self.convDown_1 = multiScaleConvDown(C=C_out, kernel_list=net_info_dict["convDownKernels"])
+        for i, C_out in enumerate(net_info_dict["C_list"]):
+            # 添加编码器卷积层
+            self.encoder_conv_list.append(
+                ResConv(
+                    C_in=C_in, 
+                    C_out=C_out,
+                    conv_kernels=net_info_dict["conv_kernels"],
+                    conv_dilats=net_info_dict["conv_dilats"],
+                    attn=net_info_dict["attn_list"][i],
+                    LSK_kernels=net_info_dict["LSK_kernels"],
+                    LSK_dilats=net_info_dict["LSK_dilats"],
+                    LSK_mid_kernel=net_info_dict["LSK_mid_kernel"]
+                )
+            )
+            
+            # 添加编码器下采样层
+            self.encoder_down_list.append(
+                multiScaleConvDown(
+                    C=C_out, 
+                    kernel_list=net_info_dict["encoderDownKernels"]
+                )
+            )
+            
+            C_in = C_out  # 更新输入通道数为当前输出通道数
 
 
+        # 中心卷积层
+        self.conv_center = fractal_conv(
+            C_in=C_out,  # 使用最后一个编码器层的输出通道数
+            C_out=C_out,
+            kernel_list=net_info_dict["fra_kernels"],
+            dilated_list=net_info_dict["fra_dilates"],
+            inception_module=inception_sum
+        )
+        self.atten_center = AttnBlock(C_out)
+        # 中间注意力模块列表
+        self.mid_attn_list = nn.ModuleList()
+        # 为每个编码器层输出和输入添加注意力模块
+        for i in range(len(net_info_dict["C_list"]) + 1):
+            # 确定输入通道数：第一层使用原始输入通道数，后续使用对应编码器层输出通道数
+            attn_C_in = net_info_dict["in_shape"][1] if i == 0 else net_info_dict["C_list"][i - 1]
+            
+            self.mid_attn_list.append(
+                MSAA_space_atten(
+                    C_in=attn_C_in,
+                    space_pool_kernel=net_info_dict["MSAA_pool_kernel"],
+                    kernel_list=net_info_dict["MSAA_kernels"],
+                    dilated_list=net_info_dict["MSAA_dilats"]
+                )
+            )
+
+
+
+        # 解码器部分
+        self.decode_conv_list = nn.ModuleList()  # 解码器卷积层列表
+        self.decode_up_list = nn.ModuleList()   # 解码器上采样层列表
+        
+        # 从最深到最浅构建解码器
+        for i in range(len(net_info_dict["C_list"]) - 1, -1, -1):
+            # 解码器输入是上采样输出与跳跃连接的拼接
+            C_in = net_info_dict["C_list"][i] * 2  # 通道数翻倍
+            C_out = net_info_dict["C_list"][i]      # 输出通道数与对应编码器层相同
+            
+            self.decode_conv_list.append(
+                ResConv(
+                    C_in=C_in, 
+                    C_out=C_out,
+                    conv_kernels=net_info_dict["conv_kernels"],
+                    conv_dilats=net_info_dict["conv_dilats"],
+                    attn=net_info_dict["attn_list"][i], 
+                    LSK_kernels=net_info_dict["LSK_kernels"],
+                    LSK_dilats=net_info_dict["LSK_dilats"],
+                    LSK_mid_kernel=net_info_dict["LSK_mid_kernel"]
+                )
+            )
+            
+            self.decode_up_list.append(
+                multiScaleUpSample(
+                    C_in=C_out,
+                    kernel_list=net_info_dict["decoderUpKernels"]
+                )
+            )
+
+
+        # 时间嵌入模块
+        self.Time_encode_Embeddings = nn.ModuleList()  # 编码器时间嵌入
+        self.Time_decode_Embeddings = nn.ModuleList()  # 解码器时间嵌入
+        
+        # 空间尺寸缩小因子列表
+        attn_factors = [8, 4, 2, 1]
+        
+        # 为每个尺度创建时间嵌入模块
+        for factor in attn_factors:
+            # 计算当前尺度的特征图尺寸
+            H_scale = self.input_H // factor
+            W_scale = self.input_W // factor
+            
+            self.Time_encode_Embeddings.append(
+                TimeEmbedding(
+                    T = net_info_dict["T"], 
+                    d_model = net_info_dict["tdim"], 
+                    img_H = H_scale, 
+                    img_W = W_scale
+                )
+            )
+            
+            self.Time_decode_Embeddings.append(
+                TimeEmbedding(
+                    T = net_info_dict["T"], 
+                    d_model = net_info_dict["tdim"], 
+                    img_H = H_scale, 
+                    img_W = W_scale
+                )
+            )
+
+
+        # 输出层
+        # 计算最终拼接后的通道数
+        now_ch = net_info_dict["C_list"][0] // 2 + net_info_dict["in_shape"][1]
+        
+        self.tail = nn.Sequential(
+            nn.BatchNorm2d(now_ch),  # 分组归一化
+            nn.Conv2d(
+                now_ch, 
+                net_info_dict["out_shape"][1], 
+                net_info_dict["tail_kernel"], 
+                padding=net_info_dict["tail_kernel"] // 2  # 保持尺寸不变的填充
+            )
+        )
+
+    def forward(self, x_t, t, condition_info):
+        """
+        前向传播
+        
+        参数:
+            x_t (Tensor): 输入张量，形状为 [B, C_out, H, W]
+            t (Tensor): 时间向量，形状为 [B]
+            condition_info (Tensor): 条件信息张量，形状为 [B, C_condition, H, W]
+            
+        返回:
+            Tensor: 输出速度场，形状为 [B, C_out, H, W]
+        """
+        # 预处理输入：拼接输入和条件信息
+        x_in = torch.cat([x_t, condition_info], dim=1)
+        
+        # 计算所有尺度的时间嵌入
+        time_encode_embs = [te(t) for te in self.Time_encode_Embeddings]
+        time_decode_embs = [td(t) for td in self.Time_decode_Embeddings]
+
+        # 编码器路径
+        encoder_outs = [x_in]  # 保存各层输出用于跳跃连接
+        
+        x = x_in
+        for i, (conv, down) in enumerate(zip(self.encoder_conv_list, self.encoder_down_list)):
+            # 应用卷积层并加入时间嵌入
+            x = conv(x, time_encode_embs[len(self.encoder_conv_list) - i])
+            # 下采样
+            x = down(x)
+            # 保存输出用于跳跃连接
+            encoder_outs.append(x)
+
+        # 中心处理
+        x = self.atten_center(self.conv_center(encoder_outs[-1]))
+
+        # 解码器路径
+        for i, (conv, up) in enumerate(zip(self.decode_conv_list, self.decode_up_list)):
+            # 上采样
+            x = up(x)
+            # 与对应编码器层输出拼接（通过注意力模块处理）
+            skip_connection = self.mid_attn_list[len(self.encoder_conv_list) - i](encoder_outs[-(i+2)])
+            x = torch.cat([x, skip_connection], dim=1)
+            # 应用卷积层并加入时间嵌入
+            x = conv(x, time_decode_embs[i])
+        
+        # 最终输出处理：与输入层注意力处理结果拼接
+        final_skip = self.mid_attn_list[0](encoder_outs[0])
+        x = torch.cat([x, final_skip], dim=1)
+
+        return self.tail(x)
+    
+def velocity_UNet_test():
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    batch_size = 8
+    T = 50
+    img_H = 256
+    img_W = 256
+
+    net_info_dict = {
+        "T": T,
+        "in_shape": [batch_size, 6, img_H, img_W],
+        "out_shape": [batch_size, 1, img_H, img_W],
+        "C_list": [64, 128, 256, 512],
+        "attn_list": ["LSKNet", "LSKNet", "Attn", "Attn"],
+        "conv_kernels": [3, 5, 7, 9],
+        "conv_dilats": [1, 1, 1, 1],
+        "LSK_kernels": [5, 7, 5, 5],
+        "LSK_dilats": [1, 3, 1, 1],
+        "LSK_mid_kernel": 7,
+        "encoderDownKernels": [3, 5, 7,9],
+        "fra_kernels": [3, 5, 7,9],
+        "fra_dilates": [1, 1, 1,1],
+        "MSAA_pool_kernel": 7,
+        "MSAA_kernels": [3, 5, 7,9],
+        "MSAA_dilats": [1, 1, 1,1],
+        "decoderUpKernels": [3, 5, 7,9],
+        "tdim": int(512*4),
+        "tail_kernel": 5
+    }
+
+    condition_info = torch.randn(batch_size, 5, img_H, img_W).to(device)
+    x_t = torch.randn(batch_size, 1, img_H, img_W).to(device)
+    t = torch.rand(batch_size).to(device)
+    
+    # 创建网络实例
+    net = velocity_UNet(net_info_dict).to(device)
+    
+    # 前向传播
+    output = net(x_t, t, condition_info)
+    print(f"Output shape: {output.shape}")
+
+
+if __name__ == '__main__':
+    # test_TimeEmbedding()
+
+    velocity_UNet_test()
+    # ConditionalEmbedding_test()
+    # attan_block_test()
+    # LSK_test()
+    # LSK_test()
+    # ResConv_test()
+
+
+
+    # class UNet(nn.Module):
+    #     def __init__(self, T, num_labels, ch, ch_mult, num_res_blocks, dropout):
+    #         super().__init__()
+    #         tdim = ch * 4
+    #         self.time_embedding = TimeEmbedding(T, ch, tdim)
+    #         self.cond_embedding = ConditionalEmbedding(num_labels, ch, tdim)
+    #         self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
+    #         self.downblocks = nn.ModuleList()
+    #         chs = [ch]  # record output channel when dowmsample for upsample
+    #         now_ch = ch
+    #         for i, mult in enumerate(ch_mult):
+    #             out_ch = ch * mult
+    #             for _ in range(num_res_blocks):
+    #                 self.downblocks.append(ResBlock(in_ch=now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout))
+    #                 now_ch = out_ch
+    #                 chs.append(now_ch)
+    #             if i != len(ch_mult) - 1:
+    #                 self.downblocks.append(DownSample(now_ch))
+    #                 chs.append(now_ch)
+    #
+    #         self.middleblocks = nn.ModuleList([
+    #             ResBlock(now_ch, now_ch, tdim, dropout, attn=True),
+    #             ResBlock(now_ch, now_ch, tdim, dropout, attn=False),
+    #         ])
+    #
+    #         self.upblocks = nn.ModuleList()
+    #         for i, mult in reversed(list(enumerate(ch_mult))):
+    #             out_ch = ch * mult
+    #             for _ in range(num_res_blocks + 1):
+    #                 self.upblocks.append \
+    #                     (ResBlock(in_ch=chs.pop() + now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout, attn=False))
+    #                 now_ch = out_ch
+    #             if i != 0:
+    #                 self.upblocks.append(UpSample(now_ch))
+    #         assert len(chs) == 0
+    #
+    #         self.tail = nn.Sequential(
+    #             nn.GroupNorm(32, now_ch),
+    #             Swish(),
+    #             nn.Conv2d(now_ch, 3, 3, stride=1, padding=1)
+    #         )
+    #
+    #
+    #     def forward(self, x, t, labels):
+    #         # Timestep embedding
+    #         temb = self.time_embedding(t)
+    #         cemb = self.cond_embedding(labels)
+    #         # Downsampling
+    #         h = self.head(x)
+    #         hs = [h]
+    #         for layer in self.downblocks:
+    #             h = layer(h, temb, cemb)
+    #             hs.append(h)
+    #         # Middle
+    #         for layer in self.middleblocks:
+    #             h = layer(h, temb, cemb)
+    #         # Upsampling
+    #         for layer in self.upblocks:
+    #             if isinstance(layer, ResBlock):
+    #                 h = torch.cat([h, hs.pop()], dim=1)
+    #             h = layer(h, temb, cemb)
+    #         h = self.tail(h)
+    #
+    #         assert len(hs) == 0
+    #         return h
+    #
+    # def UNet_example():
+    #     batch_size = 8
+    #     model = UNet(
+    #         T=1000, num_labels=10, ch=128, ch_mult=[1, 2, 2, 2],
+    #         num_res_blocks=2, dropout=0.1)
+    #     x = torch.randn(batch_size, 3, 32, 32)
+    #     t = torch.randint(1000, size=[batch_size])
+    #     labels = torch.randint(10, size=[batch_size])
+    #     # resB = ResBlock(128, 256, 64, 0.1)
+    #     # x = torch.randn(batch_size, 128, 32, 32)
+    #     # t = torch.randn(batch_size, 64)
+    #     # labels = torch.randn(batch_size, 64)
+    #     # y = resB(x, t, labels)
+    #     y = model(x, t, labels)
+    #     print(y.shape)
+
+    # def attan_block():
+    #
+    #     # 创建模拟输入 (2个样本, 64通道, 32x32特征图)
+    #     x = torch.randn(2, 64, 32, 32)  # shape: [B, C, H, W]
+    #     attn_block = AttnBlock(in_ch=64)
+    #     output = attn_block(x)
+    #
+    #     print("Input shape:", x.shape)  # torch.Size([2, 64, 32, 32])
+    #     print("Output shape:", output.shape)  # torch.Size([2, 64, 32, 32])
 
 
 
 
 
 
+        # conv_layer_num = len(self.encoder_conv_list)
+   
+        # time_encode_outputs = []
+        # time_decode_outputs = []
+        # x_in = torch.cat([x_t, condition_info], dim=1)
 
+        # for i in range(len(self.Time_encode_Embeddings)):
+        #     time_encode_outputs.append(self.Time_encode_Embeddings[i](t))
+        #     time_decode_outputs.append(self.Time_decode_Embeddings[i](t))
+        
+        # # 编码器路径
+        # encoder_outs = []
+        # encoder_outs.append(x_in)
+        # for i in range(len(self.encoder_conv_list)):
+        #     x_in = self.encoder_down_list[i](self.encoder_conv_list[i](x_in,time_encode_outputs[conv_layer_num-i]))
+        #     encoder_outs.append(x_in)
 
+        # center_out = self.conv_center(encoder_outs[-1])
+        # for i in range(len(conv_layer_num)):
+            
+        #     center_out = self.decode_up_list[i]( self.encoder_conv_list[i](torch.cat([center_out, self.mid_attn_list[conv_layer_num-i](center_out)], dim=1),time_decode_outputs[i]) )
 
-    def forward(self, x):
-        return x
+        # return self.tail(torch.cat([center_out, self.mid_attn_list[conv_layer_num-i](encoder_outs[0])], dim=1))
+
 
 
 
@@ -513,110 +830,4 @@ class velocity_UNet(nn.Module):
 
 
 
-
-
-
-if __name__ == '__main__':
-    # test_TimeEmbedding()
-
-    # velocity_UNet_test()
-    # ConditionalEmbedding_test()
-    # attan_block_test()
-    # LSK_test()
-    # LSK_test()
-    ResConv_test()
-
-
-
-    # class UNet(nn.Module):
-    #     def __init__(self, T, num_labels, ch, ch_mult, num_res_blocks, dropout):
-    #         super().__init__()
-    #         tdim = ch * 4
-    #         self.time_embedding = TimeEmbedding(T, ch, tdim)
-    #         self.cond_embedding = ConditionalEmbedding(num_labels, ch, tdim)
-    #         self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
-    #         self.downblocks = nn.ModuleList()
-    #         chs = [ch]  # record output channel when dowmsample for upsample
-    #         now_ch = ch
-    #         for i, mult in enumerate(ch_mult):
-    #             out_ch = ch * mult
-    #             for _ in range(num_res_blocks):
-    #                 self.downblocks.append(ResBlock(in_ch=now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout))
-    #                 now_ch = out_ch
-    #                 chs.append(now_ch)
-    #             if i != len(ch_mult) - 1:
-    #                 self.downblocks.append(DownSample(now_ch))
-    #                 chs.append(now_ch)
-    #
-    #         self.middleblocks = nn.ModuleList([
-    #             ResBlock(now_ch, now_ch, tdim, dropout, attn=True),
-    #             ResBlock(now_ch, now_ch, tdim, dropout, attn=False),
-    #         ])
-    #
-    #         self.upblocks = nn.ModuleList()
-    #         for i, mult in reversed(list(enumerate(ch_mult))):
-    #             out_ch = ch * mult
-    #             for _ in range(num_res_blocks + 1):
-    #                 self.upblocks.append \
-    #                     (ResBlock(in_ch=chs.pop() + now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout, attn=False))
-    #                 now_ch = out_ch
-    #             if i != 0:
-    #                 self.upblocks.append(UpSample(now_ch))
-    #         assert len(chs) == 0
-    #
-    #         self.tail = nn.Sequential(
-    #             nn.GroupNorm(32, now_ch),
-    #             Swish(),
-    #             nn.Conv2d(now_ch, 3, 3, stride=1, padding=1)
-    #         )
-    #
-    #
-    #     def forward(self, x, t, labels):
-    #         # Timestep embedding
-    #         temb = self.time_embedding(t)
-    #         cemb = self.cond_embedding(labels)
-    #         # Downsampling
-    #         h = self.head(x)
-    #         hs = [h]
-    #         for layer in self.downblocks:
-    #             h = layer(h, temb, cemb)
-    #             hs.append(h)
-    #         # Middle
-    #         for layer in self.middleblocks:
-    #             h = layer(h, temb, cemb)
-    #         # Upsampling
-    #         for layer in self.upblocks:
-    #             if isinstance(layer, ResBlock):
-    #                 h = torch.cat([h, hs.pop()], dim=1)
-    #             h = layer(h, temb, cemb)
-    #         h = self.tail(h)
-    #
-    #         assert len(hs) == 0
-    #         return h
-    #
-    # def UNet_example():
-    #     batch_size = 8
-    #     model = UNet(
-    #         T=1000, num_labels=10, ch=128, ch_mult=[1, 2, 2, 2],
-    #         num_res_blocks=2, dropout=0.1)
-    #     x = torch.randn(batch_size, 3, 32, 32)
-    #     t = torch.randint(1000, size=[batch_size])
-    #     labels = torch.randint(10, size=[batch_size])
-    #     # resB = ResBlock(128, 256, 64, 0.1)
-    #     # x = torch.randn(batch_size, 128, 32, 32)
-    #     # t = torch.randn(batch_size, 64)
-    #     # labels = torch.randn(batch_size, 64)
-    #     # y = resB(x, t, labels)
-    #     y = model(x, t, labels)
-    #     print(y.shape)
-
-    # def attan_block():
-    #
-    #     # 创建模拟输入 (2个样本, 64通道, 32x32特征图)
-    #     x = torch.randn(2, 64, 32, 32)  # shape: [B, C, H, W]
-    #     attn_block = AttnBlock(in_ch=64)
-    #     output = attn_block(x)
-    #
-    #     print("Input shape:", x.shape)  # torch.Size([2, 64, 32, 32])
-    #     print("Output shape:", output.shape)  # torch.Size([2, 64, 32, 32])
 
