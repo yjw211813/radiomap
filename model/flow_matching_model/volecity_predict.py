@@ -340,7 +340,6 @@ class velocity_UNet(nn.Module):
     def __init__(self, net_info_dict):
         """
         速度场UNet网络模型
-        
         参数:
             net_info_dict (dict): 包含网络配置信息的字典
         """
@@ -417,8 +416,14 @@ class velocity_UNet(nn.Module):
         for i in range(len(net_info_dict["C_list"]) - 1, -1, -1):
             # 解码器输入是上采样输出与跳跃连接的拼接
             C_in = net_info_dict["C_list"][i] * 2  # 通道数翻倍
-            C_out = net_info_dict["C_list"][i]      # 输出通道数与对应编码器层相同
-            
+            C_out = net_info_dict["C_list"][i] // 2     # 输出通道数与对应编码器层相同
+
+            self.decode_up_list.append(
+                multiScaleUpSample(
+                    C_in=net_info_dict["C_list"][i],
+                    kernel_list=net_info_dict["decoderUpKernels"]
+                )
+            )
             self.decode_conv_list.append(
                 ResConv(
                     C_in=C_in, 
@@ -432,12 +437,6 @@ class velocity_UNet(nn.Module):
                 )
             )
             
-            self.decode_up_list.append(
-                multiScaleUpSample(
-                    C_in=C_out,
-                    kernel_list=net_info_dict["decoderUpKernels"]
-                )
-            )
 
 
         # 时间嵌入模块
@@ -499,6 +498,7 @@ class velocity_UNet(nn.Module):
             Tensor: 输出速度场，形状为 [B, C_out, H, W]
         """
         # 预处理输入：拼接输入和条件信息
+        conv_num = len(self.encoder_conv_list)
         x_in = torch.cat([x_t, condition_info], dim=1)
         
         # 计算所有尺度的时间嵌入
@@ -511,21 +511,22 @@ class velocity_UNet(nn.Module):
         x = x_in
         for i, (conv, down) in enumerate(zip(self.encoder_conv_list, self.encoder_down_list)):
             # 应用卷积层并加入时间嵌入
-            x = conv(x, time_encode_embs[len(self.encoder_conv_list) - i])
-            # 下采样
-            x = down(x)
+            x = conv(x, time_encode_embs[conv_num - i-1])
             # 保存输出用于跳跃连接
             encoder_outs.append(x)
+            # 下采样
+            x = down(x)
+
 
         # 中心处理
-        x = self.atten_center(self.conv_center(encoder_outs[-1]))
+        x = self.atten_center(self.conv_center(x))
 
         # 解码器路径
         for i, (conv, up) in enumerate(zip(self.decode_conv_list, self.decode_up_list)):
             # 上采样
             x = up(x)
             # 与对应编码器层输出拼接（通过注意力模块处理）
-            skip_connection = self.mid_attn_list[len(self.encoder_conv_list) - i](encoder_outs[-(i+2)])
+            skip_connection = self.mid_attn_list[conv_num - i](encoder_outs[-(i+1)])
             x = torch.cat([x, skip_connection], dim=1)
             # 应用卷积层并加入时间嵌入
             x = conv(x, time_decode_embs[i])
@@ -538,7 +539,8 @@ class velocity_UNet(nn.Module):
     
 def velocity_UNet_test():
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-    batch_size = 8
+    get_gpu_info = gpu_statistic(device)
+    batch_size = 16
     T = 50
     img_H = 256
     img_W = 256
@@ -567,14 +569,11 @@ def velocity_UNet_test():
 
     condition_info = torch.randn(batch_size, 5, img_H, img_W).to(device)
     x_t = torch.randn(batch_size, 1, img_H, img_W).to(device)
-    t = torch.rand(batch_size).to(device)
+    t = torch.rand(batch_size)
     
     # 创建网络实例
-    net = velocity_UNet(net_info_dict).to(device)
-    
-    # 前向传播
-    output = net(x_t, t, condition_info)
-    print(f"Output shape: {output.shape}")
+    model = velocity_UNet(net_info_dict)
+    get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info",x_t,model,temb = t,condition = condition_info)
 
 
 if __name__ == '__main__':

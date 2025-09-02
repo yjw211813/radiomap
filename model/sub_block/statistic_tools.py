@@ -5,7 +5,7 @@ class gpu_statistic():
     def __init__(self,device):
         self.device = device
 
-    def print_gpu_memory(self,description,x,model,temb = None):
+    def print_gpu_memory(self,description,x,model,temb = None,condition = None):
         print(description)
         # 清空GPU缓存并记录初始显存
         torch.cuda.empty_cache()
@@ -25,8 +25,10 @@ class gpu_statistic():
         start_time = time.time()
         if temb is None:
             output = model(x)
-        else:
+        elif condition is None:
             output = model(x, temb)
+        else:
+            output = model(x, temb, condition)
         forward_time = time.time() - start_time
         print(f"前向传播时间: {forward_time:.4f} 秒")
 
