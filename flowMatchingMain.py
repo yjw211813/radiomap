@@ -46,38 +46,46 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
     # 训练标识
-    print("flowMatching_structure_modify")
+    print("flowMatching_MSAA")
     #   模型定义参数类
-    if simuSetDict["carsInput"] !="no":
-        UNet_BTM_input_shape = [6, 256, 256]
-    else:
-        UNet_BTM_input_shape = [5, 256, 256]
+    # if simuSetDict["carsInput"] !="no":
+    #     UNet_BTM_input_shape = [6, 256, 256]
+    # else:
+    #     UNet_BTM_input_shape = [5, 256, 256]
+    net_info_dict = {
+        "T": 100,
+        "in_shape": [train_batch_size, 6, 256, 256],
+        "out_shape": [train_batch_size, 1, 256, 256],
+        "C_list": [64, 128, 256, 512],
+        "attn_list": ["LSKNet", "LSKNet", "Attn", "Attn"],
+        "conv_kernels": [3, 5, 7, 9],
+        "conv_dilats": [1, 1, 1, 1],
+        "LSK_kernels": [5, 7, 5, 5],
+        "LSK_dilats": [1, 3, 1, 1],
+        "LSK_mid_kernel": 7,
+        "encoderDownKernels": [3, 5, 7,9],
+        "fra_kernels": [3, 5, 7,9],
+        "fra_dilates": [1, 1, 1,1],
+        "MSAA_pool_kernel": 7,
+        "MSAA_kernels": [3, 5, 7,9],
+        "MSAA_dilats": [1, 1, 1,1],
+        "decoderUpKernels": [3, 5, 7,9],
+        "tdim": int(512*4),
+        "tail_kernel": 5
+    }
+    model = velocity_UNet(net_info_dict)
 
-    UNet_BTM_output_shape = [1, 256, 256]
-    C_down_list =  [32, 64, 128, 256]
-    C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
-    attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-    T = 50
+    total_epoch = 100
+    start_epoch = 0
     #   定义训练过程数据保存地址
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching01/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching01/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching_MSAA/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching_MSAA/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching_MSAA/"# 模型存储位置
     if os.path.exists(log_dir):
         shutil.rmtree(log_dir)  # 删除上一次训练过程数据
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(model_save_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
-
-
-    model = velocity_UNet(T = T,                                           # 流匹配的迭代总轮次
-                           input_shape = UNet_BTM_input_shape,                   # 网络输入形状
-                           output_shape = UNet_BTM_output_shape,                 # 网络输出形状
-                           C_down_list = C_down_list,                            # Unet网络通道设置列表
-                           attn_params = attn_params).to(device)                 # 掩码网络通道设置列表
-
-
-    total_epoch = 100
-    start_epoch = 0
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching01/"
     print(val_dir)
     app = flowMatching_app(start_epoch = start_epoch,
@@ -85,7 +93,7 @@ if __name__ == '__main__':
                            model_load_dir = model_load_dir,
                            writer = writer,
                            device = device,
-                           T = T)
+                           T = net_info_dict["T"])
     app.train(model, train_loader, val_loader,val_dir, total_epoch)
     # load_epoch = 30
     # test_dir = r"/home/code/radio_map_construction/runs/model_test_log/flow_matching01/"
