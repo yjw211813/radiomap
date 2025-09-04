@@ -13,9 +13,13 @@ class gpu_statistic():
         print(f"初始显存占用: {initial_memory:.2f} MB")
         if temb is None:
             x = x.to(self.device)
+        elif condition is None:
+            x = x.to(self.device)
+            temb = temb.to(self.device)
         else:
             x = x.to(self.device)
             temb = temb.to(self.device)
+            condition = condition.to(self.device)
         input_memory = torch.cuda.memory_allocated(self.device) / 1024 ** 2 - initial_memory
         print(f"输入张量显存占用: {input_memory:.2f} MB")
         model.to(self.device)

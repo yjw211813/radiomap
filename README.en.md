@@ -1,10 +1,5 @@
 # radio_map_construction
 
-#### Description
-my code
-
-#### Software Architecture
-Software architecture description
 
 #### Installation
 # 构建镜像 (在Dockerfile目录下执行)
@@ -51,20 +46,14 @@ print(f"CUDA available: {torch.cuda.is_available()}")
 docker run --gpus all -d --name liaozhengyan_GPU -v /home/cec/student/liaozhengyan/radio_map_construction:/home/code -p 32956:22 liaozhengyan_gpu:latest
 
 docker run --shm-size=32g --gpus all -d --name liaozhengyan_GPU -v /home/cecr/liaozhengyan/radio_map_construction:/home/code -p 32956:22 liaozhengyan_gpu:latest
-# 输入输出的形状
-条件相关的形状为
-
-条件的形状(4,256,256)
-生成目标形状(1,256,256)
-原始输入(1,256,256)
 ## 三个可能的改进方向
 先对下面内容进行改进
-- 中间网络层 注意力模块的改进
+- 中间网络层 注意力模块的改进  √
 - 条件网络改进 
 - 残差模块改进   √
-- 条件引入改进   
-- 原始输入改进 （简单插值 单独网络生成 ）
- 时间向量应该如何引入到当前的网络中呢？
+- 条件引入改进   √ 
+- 原始输入改进 （简单插值 单独网络生成 ） √
+ 时间向量应该如何引入到当前的网络中呢？  √
 - 
 相似内积模块设计
 
@@ -82,11 +71,7 @@ sudo usermod -aG docker jinshidong
 利用fft来辅助构造loss函数
 
 
-pip install --no-index --find-links=./spikingjelly_offline_pkgs spikingjelly
 
-pip install h5py-3.14.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-
-docker run --shm-size=8g -d --name liaozhengyan_GPU -p 32956:22 liaozhengyan_gpu:latest
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/data:/home/data -v ~/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/dataset:/home/data -v ~/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/liaozhengyan/dataset:/home/data -v ~/liaozhengyan/code:/home/code -p 32944:22 liaozhengyan_gpu:latestV2
@@ -96,11 +81,6 @@ docker run --shm-size=64g --gpus all -d --name liaozhengyan_mamba -v ~/liaozheng
 ls -ld ~/liaozhengyan
 sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
 
-
-# 7月18号 ToDoList
-1.重构第一篇小论文的代码
-2.引入新的模型和数据集进行算法验证
-3.做第一篇小论文的汇报ppt
 
 4.开始写小论文的文字稿部分
 可以开始写小论文相关介绍部分和贡献部分
@@ -148,31 +128,27 @@ python3 /home/code/radioMap/train/Unet_BTM_train.py
 并且应该赶紧实现一些基准模型
 然后进行实验对比
 当前目标数据预处理部分
-1、需要补充同一样本反复采样的数据
-2、需要多进行几组数据预处理工作（使用一些经典插值算法）
+1、需要补充同一样本反复采样的数据   ？
+2、需要多进行几组数据预处理工作（使用一些经典插值算法） ？
 当前模型结构采样问题
-1、需要加入一些先进的通道注意力
+1、需要加入一些先进的通道注意力 √
 
-2、需要引入UNet++的结构
+2、需要引入UNet++的结构   √
 
-3、需要一些空间注意力（尽量将模块本身的作用想明白）
+3、需要一些空间注意力（尽量将模块本身的作用想明白） √
 
 4、引入一些编码误差修正过程
 
 算法后处理部分可以加一个修正模块进行高频部分的修正
 1、看是否有哪些高频注意力机制可以使用
 
-# flowmatching model 
-条件训练的代码需要写一个if else
-采样过程需要将求解算法和速度预测分开
-需要将DDPM扩散过程进行对象化
+# flowmatching model
 
 flowmatching setting
 ------------------------------
 flowmatching APP.py  volecity_predict.py
 ---------------------------
 scheduler.py
-
 
 set PYTHONPATH=C:\Users\Administrator\Desktop\notebook\second_paper\radio_map_construction
 
@@ -181,3 +157,40 @@ set PYTHONPATH=C:\Users\Administrator\Desktop\radiomap\radio_map_construction
 set PYTHONPATH=/home/code/radioMap
 
 lightning 框架
+
+# 9月4号新问题 今天在未来城跑下面代码的实验
+- 模型过多关注于建筑物的还原，忽略了其中强度部分的还原，应该引入一个加权，然后利用卫星地图直接对loss进行加权，让模型关注更应该关注的地方
+现在的一个解决思路是：直接将煎建筑物用到插值图像中，然后再输入到扩散模型
+
+- 不使用插值 避免模型取消一些地方的关注
+现在的一个解决思路是：直接将煎建筑物用到采样图像中，然后再输入到扩散模型
+
+- 进行一些模块的消融实验
+取消一些模块
+
+
+tmux 开发和学习  ~/.tmux.conf
+# 开启鼠标模式，方便用鼠标切换窗口、窗格，调整窗格大小:cite[4]:cite[5]
+set -g mouse on
+
+# 将前缀快捷键从默认的 Ctrl+b 更改为 Ctrl+a（可选）:cite[5]:cite[6]
+set -g prefix C-a
+unbind C-b
+bind C-a send-prefix
+
+# 禁止窗口自动重命名:cite[5]
+setw -g automatic-rename off
+
+# 重新加载配置文件的热键（前缀键 + r）:cite[5]
+bind r source-file ~/.tmux.conf \; display "Config reloaded!"
+tmux source-file ~/.tmux.conf
+
+
+
+
+
+tmux ls 查看当前会话窗口
+# 杀掉进程
+tmux kill-session -t liaozhengyan
+
+

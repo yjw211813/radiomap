@@ -150,7 +150,7 @@ class flowMatching_app():
         os.makedirs(val_dir)
 
         model.eval()
-
+        model.to(self.device)
         wrapped_vf = WrappedModel(model)
         solver = ODESolver(velocity_model=wrapped_vf)
         # 推理过程的步数 这个是总体推理相关设置
@@ -224,8 +224,8 @@ class flowMatching_app():
                         target_path = os.path.join(val_dir, "origin_img.png")
                         self.visualize_target_image(targets, sample_idx, target_path)
 
-                        # 3. 显示所有图像
-                        plt.show()
+                        # # 3. 显示所有图像
+                        # plt.show()
                 else:
                     break
         # 计算整个验证集的平均指标
@@ -244,6 +244,7 @@ class flowMatching_app():
 
     def train(self, model, train_loader, val_loader,val_dir, total_epoch, save_interval=1,val_interval=10,):
 
+        model.to(self.device)
         # 定义优化器
         optimizer = torch.optim.Adam(model.parameters(), lr = 1e-4)
         cosineScheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer,
@@ -251,8 +252,8 @@ class flowMatching_app():
                                                                eta_min=0,
                                                                last_epoch=-1)
         warmUpScheduler = GradualWarmupScheduler(optimizer=optimizer,
-                                                 multiplier=2.5,               # 热身阶段最终会将学习率提高到初始值的2.5倍   1e-3 * multiplier
-                                                 warm_epoch=total_epoch // 20, # 热身阶段占10%的总epoch
+                                                 multiplier=1,               # 热身阶段最终会将学习率提高到初始值的2.5倍   1e-3 * multiplier
+                                                 warm_epoch=total_epoch // 20, # 热身阶段占5%的总epoch
                                                  after_scheduler=cosineScheduler)
         # 定义采样轨迹 仿射概率路径 X_t = α_t * X_1 + σ_t * X_0 ， CondOTScheduler 是一个具体的调度器实现，它定义了线性插值路径
         path = AffineProbPath(scheduler=CondOTScheduler())
@@ -263,13 +264,13 @@ class flowMatching_app():
         # 如果提供了检查点路径，加载优化器和调度器状态
         if self.start_epoch != 0:
             checkpoint_path = os.path.join(self.model_save_dir, f"checkpoint_epoch_{self.start_epoch}.pth")
-            checkpoint = torch.load(checkpoint_path)
+            checkpoint = torch.load(checkpoint_path, map_location=self.device)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             warmUpScheduler.load_state_dict(checkpoint['scheduler_state_dict'])
             print(f"成功从epoch {self.start_epoch}恢复训练")
 
-        model.to(self.device)
+
 
         for e in range(self.start_epoch, total_epoch):
             running_loss = 0.0
@@ -324,7 +325,7 @@ class flowMatching_app():
         model.load_state_dict(checkpoint['model_state_dict'])
         print("model load weight done.")
         model.eval()
-
+        model.to(self.device)
         wrapped_vf = WrappedModel(model)
         solver = ODESolver(velocity_model=wrapped_vf)
         # 推理过程的步数 这个是总体推理相关设置

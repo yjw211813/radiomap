@@ -480,8 +480,8 @@ def velocity_UNet_test():
         "tail_kernel": 5
     }
 
-    condition_info = torch.randn(batch_size, 5, img_H, img_W).to(device)
-    x_t = torch.randn(batch_size, 1, img_H, img_W).to(device)
+    condition_info = torch.randn(batch_size, 5, img_H, img_W)
+    x_t = torch.randn(batch_size, 1, img_H, img_W)
     t = torch.rand(batch_size)
     
     # 创建网络实例

@@ -26,15 +26,17 @@ if __name__ == '__main__':
         "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
         "numTx": 80,  # 信源数量设定
         "thresh": 0.05,  # 环境噪声
-        "simulation": "IRT2",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+        "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
         "carsSimul": "yes",  # 是否开启小车作为仿真
         "carsInput": "yes",  # 是否将小车图作为模型输入
-        "IRT2maxW": 1,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+        "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
         "cityMap": "complete",  # 是否输入完全的城市地图
         "missing": 1,  # 地图缺失号码
         "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
         "num_samples_low": 10,  # 最低采样数
-        "num_samples_high": 300  # 最高采样数
+        "num_samples_high": 300,  # 最高采样数
+        "inter_flag":True, # 看是否需要插值图像
+        "scale256_flag": False# 取值范围是否为0 - 255
     }
 
     My_Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
