@@ -42,8 +42,8 @@ if __name__ == '__main__':
     My_Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
     i = 400
     inputs, image_gain = My_Radio_train[i]
-    mask = inputs[4] != 0
-    image_gain[0][mask] += image_gain[0][mask]
+    # mask = inputs[4] != 0
+    # image_gain[0][mask] += image_gain[0][mask]
 
     # 显示结果
     plt.figure(figsize=(15, 10))

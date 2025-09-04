@@ -233,6 +233,17 @@ class RadioMapSeerLoader(Dataset):
         else:
             return io.imread(img_path) / 256
 
+    def fusing_building(self,interpolate_data,image_buildings):
+        mask = image_buildings > 0
+        interpolate_data[mask] = 0
+
+        return interpolate_data
+
+    def fusing_cars(self,interpolate_data,image_cars):
+        mask = image_cars > 0
+        interpolate_data[mask] = interpolate_data[mask]/2
+
+        return interpolate_data
 
 
     def __len__(self):
@@ -253,6 +264,9 @@ class RadioMapSeerLoader(Dataset):
 
         if self.inter_flag == True:
             interpolate_data = self.idw_interpolate_sample(input_samples, k=5)
+
+            interpolate_data =self.fusing_building(interpolate_data,image_buildings)
+
             input_layers = [image_buildings, image_Tx, input_samples, interpolate_data]
         else:
             input_layers = [image_buildings, image_Tx, input_samples]
@@ -261,6 +275,8 @@ class RadioMapSeerLoader(Dataset):
         if self.carsInput != "no":
             image_cars = self._load_cars_map(map_name)
             input_layers.append(image_cars)
+            if self.inter_flag == True:
+                input_layers[-2] = self.fusing_cars(input_layers[-2],image_cars)
 
         inputs = np.stack(input_layers, axis=2)
 

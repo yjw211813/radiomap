@@ -168,6 +168,7 @@ lightning 框架
 - 进行一些模块的消融实验
 取消一些模块
 
+现在发现扩散模型需要批次开大一些才好训练
 
 tmux 开发和学习  ~/.tmux.conf
 # 开启鼠标模式，方便用鼠标切换窗口、窗格，调整窗格大小:cite[4]:cite[5]
@@ -185,8 +186,7 @@ setw -g automatic-rename off
 bind r source-file ~/.tmux.conf \; display "Config reloaded!"
 tmux source-file ~/.tmux.conf
 
-
-
+tmux attach -t
 
 
 tmux ls 查看当前会话窗口

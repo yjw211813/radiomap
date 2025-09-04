@@ -9,8 +9,8 @@ from model.flow_matching_model.volecity_predict import velocity_UNet
 from data.radioSeerRead import create_dataloaders
 
 if __name__ == '__main__':
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-    train_batch_size = 8  # 批次大小
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+    train_batch_size = 20  # 批次大小
     val_batch_size = 2
     test_batch_size = 2   # 批次大小
 
@@ -46,14 +46,14 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
     # 训练标识
-    print("flowMatching_MSAA")
+    print("flowMatching_MSAA_modify_input")
     #   模型定义参数类
     # if simuSetDict["carsInput"] !="no":
     #     UNet_BTM_input_shape = [6, 256, 256]
     # else:
     #     UNet_BTM_input_shape = [5, 256, 256]
     net_info_dict = {
-        "T": 100,
+        "T": 32,
         "in_shape": [train_batch_size, 6, 256, 256],
         "out_shape": [train_batch_size, 1, 256, 256],
         "C_list": [64, 128, 256, 512],
@@ -76,17 +76,17 @@ if __name__ == '__main__':
     model = velocity_UNet(net_info_dict)
 
     total_epoch = 100
-    start_epoch = 20
+    start_epoch = 0
     #   定义训练过程数据保存地址
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching_MSAA/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching_MSAA/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching_MSAA/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching_MSAA_modify_input/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching_MSAA_modify_input/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching_MSAA_modify_input/"# 模型存储位置
     if os.path.exists(log_dir):
         shutil.rmtree(log_dir)  # 删除上一次训练过程数据
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(model_save_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
-    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching_MSAA/"
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/flow_matching_MSAA_modify_input/"
     print(val_dir)
     app = flowMatching_app(start_epoch = start_epoch,
                            model_save_dir = model_save_dir,

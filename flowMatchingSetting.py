@@ -95,7 +95,7 @@ if __name__ == '__main__':
                            device = device,
                            T = net_info_dict["T"])
     # app.train(model, train_loader, val_loader,val_dir, total_epoch)
-    load_epoch = 19
+    load_epoch = 28
     test_dir = r"/home/code/radio_map_construction/runs/model_test_log/flow_matching_MSAA/"
     os.makedirs(test_dir, exist_ok=True)
     checkpoint_path = os.path.join(model_load_dir, f"checkpoint_epoch_{load_epoch}.pth")
