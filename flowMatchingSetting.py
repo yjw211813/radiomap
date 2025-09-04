@@ -9,10 +9,10 @@ from model.flow_matching_model.volecity_predict import velocity_UNet
 from data.radioSeerRead import create_dataloaders
 
 if __name__ == '__main__':
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     train_batch_size = 16  # 批次大小
-    val_batch_size = 2
-    test_batch_size = 2   # 批次大小
+    val_batch_size = 1
+    test_batch_size = 1   # 批次大小
 
     simuSetDict = {
         "ind1": 0,  # 起始索引
@@ -29,7 +29,7 @@ if __name__ == '__main__':
         "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
         "num_samples_low": 10,  # 最低采样数
         "num_samples_high": 300,  # 最高采样数
-        "inter_flag":True, # 看是否需要插值图像
+        "inter_flag":False, # 看是否需要插值图像
         "scale256_flag": False# 取值范围是否为0 - 255
     }
     # 加载数据集
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     #     UNet_BTM_input_shape = [5, 256, 256]
     net_info_dict = {
         "T": 100,
-        "in_shape": [train_batch_size, 6, 256, 256],
+        "in_shape": [train_batch_size, 5, 256, 256], # 没有插值了
         "out_shape": [train_batch_size, 1, 256, 256],
         "C_list": [64, 128, 256, 512],
         "attn_list": ["LSKNet", "LSKNet", "Attn", "Attn"],
@@ -95,7 +95,7 @@ if __name__ == '__main__':
                            device = device,
                            T = net_info_dict["T"])
     # app.train(model, train_loader, val_loader,val_dir, total_epoch)
-    load_epoch = 28
+    load_epoch = 22
     test_dir = r"/home/code/radio_map_construction/runs/model_test_log/flow_matching_MSAA/"
     os.makedirs(test_dir, exist_ok=True)
     checkpoint_path = os.path.join(model_load_dir, f"checkpoint_epoch_{load_epoch}.pth")
