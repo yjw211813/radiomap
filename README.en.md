@@ -77,6 +77,7 @@ docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/dataset:/ho
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/liaozhengyan/dataset:/home/data -v ~/liaozhengyan/code:/home/code -p 32944:22 liaozhengyan_gpu:latestV2
 
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_mamba -v ~/liaozhengyan/dataset:/home/data -v ~/liaozhengyan/code:/home/code -p 32944:22 liaozhengyan_gpu:latest_mamba_xiao
+docker run --shm-size=64g --gpus all -d --name liaozhengyan_mamba -v ~/dataset:/home/data -v ~/code:/home/code -p 32944:22 liaozhengyan_gpu:latest_mamba_xiao
 
 ls -ld ~/liaozhengyan
 sudo chown -R liaozhengyan:liaozhengyan ~/liaozhengyan
@@ -150,6 +151,9 @@ flowmatching APP.py  volecity_predict.py
 ---------------------------
 scheduler.py
 
+nano ~/.bashrc
+export PYTHONPATH="/home/code/radioMap:$PYTHONPATH"
+
 set PYTHONPATH=C:\Users\Administrator\Desktop\notebook\second_paper\radio_map_construction
 
 set PYTHONPATH=C:\Users\Administrator\Desktop\radiomap\radio_map_construction
@@ -160,7 +164,7 @@ lightning 框架
 
 # 9月4号新问题 今天在未来城跑下面代码的实验
 - 模型过多关注于建筑物的还原，忽略了其中强度部分的还原，应该引入一个加权，然后利用卫星地图直接对loss进行加权，让模型关注更应该关注的地方
-现在的一个解决思路是：直接将煎建筑物用到插值图像中，然后再输入到扩散模型 √
+现在的一个解决思路是：直接将煎建筑物用到插值图像中，然后再输入到扩散模型
 
 - 不使用插值 避免模型取消一些地方的关注
 现在的一个解决思路是：直接将煎建筑物用到采样图像中，然后再输入到扩散模型
@@ -186,6 +190,9 @@ setw -g automatic-rename off
 bind r source-file ~/.tmux.conf \; display "Config reloaded!"
 tmux source-file ~/.tmux.conf
 
+
+
+tmux attach -t 
 tmux attach -t
 
 
