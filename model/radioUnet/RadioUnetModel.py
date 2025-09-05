@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 from torchsummary import summary
+from model.sub_block.statistic_tools import gpu_statistic
 def convrelu(in_channels, out_channels, kernel, padding, pool):
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, kernel, padding=padding),
@@ -221,8 +222,10 @@ class RadioWNet(nn.Module):
 
 def RadioWNet_test():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    model = RadioWNet(inputs=4, phase="firstU")
-    model.to(device)
+    get_gpu_info = gpu_statistic(device)
+    x = torch.randn(16, 16, 128, 128)
+    model = RadioWNet(inputs=4, phase="secondU")
+
     print(summary(model, input_size=(4, 256,256)))
 
 if __name__ == '__main__':

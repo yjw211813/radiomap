@@ -16,7 +16,7 @@ os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #from lib import RadioUNet_modules3, RadioUNet_loaders2
-from data.lib.loaders import RadioMapSeerLoader
+from data.lib.seer_loader import RadioMapSeerLoader
 
 
 if __name__ == '__main__':
@@ -36,7 +36,8 @@ if __name__ == '__main__':
         "num_samples_low": 10,  # 最低采样数
         "num_samples_high": 300,  # 最高采样数
         "inter_flag":True, # 看是否需要插值图像
-        "scale256_flag": False# 取值范围是否为0 - 255
+        "scale256_flag": False,# 取值范围是否为0 - 255
+        "sample_flag":True
     }
 
     My_Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")

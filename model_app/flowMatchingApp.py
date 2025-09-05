@@ -170,7 +170,7 @@ class flowMatching_app():
             # 遍历整个验证集
             for batch_idx, (inputs, targets) in enumerate(tqdm(val_loader, desc="Validating")):
                 if batch_idx<3:
-                    x_0 = inputs[:, 2, :, :].unsqueeze(1).to(self.device)# 将采样图像取出
+                    x_0 = inputs[:, 3, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
                     condition_info = inputs.to(self.device)
                     targets = targets.to(self.device)
 
@@ -279,7 +279,7 @@ class flowMatching_app():
                 for inputs, targets in tqdmDataLoader:
                     optimizer.zero_grad()
 
-                    x_0 = inputs[:, 2, :, :].unsqueeze(1).to(self.device)# 将采样图像取出
+                    x_0 = inputs[:, 3, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
                     x_1 = targets.to(self.device)
                     condition_info = inputs.to(self.device)
                     t = torch.rand(x_1.shape[0]).to(self.device)
@@ -345,7 +345,7 @@ class flowMatching_app():
             # 遍历整个验证集
             for batch_idx, (inputs, targets) in enumerate(tqdm(test_loader, desc="Validating")):
                 if batch_idx<3:
-                    x_0 = inputs[:, 2, :, :].unsqueeze(1).to(self.device)# 将采样图像取出
+                    x_0 = inputs[:, 3, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
                     condition_info = inputs.to(self.device)
                     targets = targets.to(self.device)
 

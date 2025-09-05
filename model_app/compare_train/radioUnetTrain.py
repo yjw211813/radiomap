@@ -40,10 +40,14 @@ def print_metrics(metrics, epoch_samples, phase):
 
     print("{}: {}".format(phase, ", ".join(outputs1)))
 
+
+
 def train_model(device,model, optimizer, scheduler,dataloaders, num_epochs=50, WNetPhase="firstU", targetType="dense", num_samples=300):
     # WNetPhase: traine first U and freez second ("firstU"), or vice verse ("secondU").
     # targetType: train against dense images ("dense") or sparse measurements ("sparse")
+    # 初始化最佳权重
     best_model_wts = copy.deepcopy(model.state_dict())
+    #初始化最佳loss
     best_loss = 1e10
 
     for epoch in range(num_epochs):
@@ -138,7 +142,7 @@ def train_model(device,model, optimizer, scheduler,dataloaders, num_epochs=50, W
 
 if __name__ == "__main__":
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
     print(device)
     # 读取数据
     Radio_train = loaders.RadioUNet_c(phase="train")
@@ -149,26 +153,23 @@ if __name__ == "__main__":
         'train': Radio_train, 'val': Radio_val
     }
 
-    batch_size = 15
-
+    batch_size = 16
     dataloaders = {
-        'train': DataLoader(Radio_train, batch_size=batch_size, shuffle=True, num_workers=1,generator=torch.Generator(device=device) ),
-        'val': DataLoader(Radio_val, batch_size=batch_size, shuffle=True, num_workers=1,generator=torch.Generator(device=device) )
+        'train': DataLoader(Radio_train, batch_size=batch_size, shuffle=True, num_workers=4),
+        'val': DataLoader(Radio_val, batch_size=batch_size, shuffle=True, num_workers=4),
+        'test': DataLoader(Radio_test, batch_size=batch_size, shuffle=True, num_workers=4),
     }
 
-    torch.set_default_dtype(torch.float32)
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    torch.backends.cudnn.enabled
     model =modules.RadioWNet(phase="firstU")
+
     model.to(device)
-    summary(model, input_size=(2, 256,256))
+
 
     optimizer_ft = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4)
 
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=30, gamma=0.1)
 
     model = train_model(device,model, optimizer_ft, exp_lr_scheduler,dataloaders)
-
 
     os.makedirs(model_save_dir, exist_ok=True)
 

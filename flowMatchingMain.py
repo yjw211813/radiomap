@@ -3,14 +3,14 @@ import shutil
 import os
 from model_app.flowMatchingApp import flowMatching_app
 from torch.utils.tensorboard import SummaryWriter
-from data.lib.loaders import RadioMapSeerLoader
+from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.flow_matching_model.volecity_predict import velocity_UNet
-from data.radioSeerRead import create_dataloaders
+
 
 if __name__ == '__main__':
     device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
-    train_batch_size = 20  # 批次大小
+    train_batch_size = 16  # 批次大小
     val_batch_size = 2
     test_batch_size = 2   # 批次大小
 
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     model = velocity_UNet(net_info_dict)
 
     total_epoch = 100
-    start_epoch = 0
+    start_epoch = 6
     #   定义训练过程数据保存地址
     log_dir = r'/home/code/radio_map_construction/runs/model_log/flow_matching_MSAA_modify_input/'# log 存储位置
     model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/flow_matching_MSAA_modify_input/"# 模型加载目录
