@@ -16,11 +16,13 @@ import torchvision
 
 class Unet_BTM_app():
     def __init__(self, start_epoch, log_dir, warmup_epochs, model_save_dir,device):
+
         self.start_epoch = start_epoch
         self.log_dir = log_dir
         self.warmup_epochs = warmup_epochs
         self.model_save_dir = model_save_dir
         self.device = device
+
     def evaluate(self, model, val_loader, writer, epoch):
         model.eval()  # Set model to evaluation mode
         total_samples = 0
@@ -79,7 +81,9 @@ class Unet_BTM_app():
 
     def train(self, model, train_loader, val_loader, total_epoch, save_interval=1):
 
-        eval_interval = 4
+
+        model.to(self.device)
+        eval_interval = 10
         # 清空 log_dir 下的文件（如果存在）
         if self.start_epoch == 0 and os.path.exists(self.log_dir):
             shutil.rmtree(self.log_dir)
@@ -106,18 +110,17 @@ class Unet_BTM_app():
         # 这一次就直接只加载模型了下一次就优化器和模型一起加载
         if self.start_epoch != 0:
             checkpoint_path = os.path.join(self.model_save_dir, f"checkpoint_epoch_{self.start_epoch}.pth")
-            checkpoint = torch.load(checkpoint_path, weights_only=True)
+            checkpoint = torch.load(checkpoint_path)
             # model.load_state_dict(checkpoint)
             print("加载历史数据成功")
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-            # for _ in range(self.start_epoch):
-            #     scheduler.step()
+
 
         # 初始化动态损失
         criterion = torch.nn.MSELoss()
-        model.to(self.device)
+
 
         for epoch in range(self.start_epoch, total_epoch):
             model.train()  # Set model to training mode
@@ -160,7 +163,8 @@ class Unet_BTM_app():
 
             # Evaluate the model after each epoch
             if (epoch + 1) % eval_interval == 0:
-                self.evaluate(model, val_loader, self.device, writer, epoch)
+
+                self.evaluate(model, val_loader, writer, epoch)
 
             # Save the model checkpoint every `save_interval` epochs
             if (epoch + 1) % save_interval == 0:

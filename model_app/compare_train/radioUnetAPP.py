@@ -35,28 +35,17 @@ class RadioWNetTrainer:
 
         self.writer = SummaryWriter(log_dir=self.log_dir)
 
-    def calc_loss_dense(self, pred, target, metrics):
-        criterion = nn.MSELoss()
-        loss = criterion(pred, target)
-        metrics['loss'] += loss.data.cpu().numpy() * target.size(0)
-        return loss
 
     def calc_loss_sparse(self, pred, target, samples, metrics, num_samples):
+        # 是为了将原来除以所有点的数乘回来
         criterion = nn.MSELoss()
         loss = criterion(samples * pred, samples * target) * (256 ** 2) / num_samples
-        metrics['loss'] += loss.data.cpu().numpy() * target.size(0)
         return loss
-
-    def print_metrics(self, metrics, epoch_samples, phase):
-        outputs = []
-        for k in metrics.keys():
-            outputs.append("{}: {:4f}".format(k, metrics[k] / epoch_samples))
-        print("{}: {}".format(phase, ", ".join(outputs)))
 
     def evaluate(self, model, val_loader, WNetPhase="firstU", targetType="dense", num_samples=300):
         model.eval()
-        metrics = defaultdict(float)
         epoch_samples = 0
+        criterion = nn.MSELoss()
 
         with torch.no_grad():
             if targetType == "dense":
@@ -65,11 +54,13 @@ class RadioWNetTrainer:
                     targets = targets.to(self.device)
 
                     [outputs1, outputs2] = model(inputs)
-                    if WNetPhase == "firstU":
-                        loss = self.calc_loss_dense(outputs1, targets, metrics)
-                    else:
-                        loss = self.calc_loss_dense(outputs2, targets, metrics)
 
+                    if WNetPhase == "firstU":
+                        loss = criterion(outputs1, targets)
+                    else:
+                        loss = criterion(outputs2, targets)
+
+                    metrics['loss'] += loss.data.cpu().numpy() * targets.size(0)
                     epoch_samples += inputs.size(0)
             elif targetType == "sparse":
                 for inputs, targets, samples in tqdm(val_loader, desc="Evaluating", ncols=100, leave=False):
@@ -114,9 +105,9 @@ class RadioWNetTrainer:
 
         return avg_loss
 
-    def train(self, model, train_loader, val_loader, num_epochs=50, WNetPhase="firstU",
+    def train(self, model, train_loader, val_loader, num_epochs, WNetPhase="firstU",
               targetType="dense", num_samples=300, save_interval=10):
-
+        eval_interval = 5
         # 初始化优化器和学习率调度器
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4)
         scheduler = lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
@@ -131,6 +122,8 @@ class RadioWNetTrainer:
             print(f"Loaded checkpoint from epoch {self.start_epoch}")
 
         best_loss = 1e10
+        avg_val_loss = 2e10
+        criterion = nn.MSELoss()
         best_model_wts = copy.deepcopy(model.state_dict())
 
         for epoch in range(self.start_epoch, num_epochs):
@@ -170,19 +163,19 @@ class RadioWNetTrainer:
                     train_loader_with_progress.set_postfix(loss=f'{loss.item():.4f}')
 
             elif targetType == "sparse":
-                for inputs, targets, samples in train_loader_with_progress:
+                for inputs, targets, loss_samples in train_loader_with_progress:
                     inputs = inputs.to(self.device)
                     targets = targets.to(self.device)
-                    samples = samples.to(self.device)
+                    loss_samples = loss_samples.to(self.device)
 
                     optimizer.zero_grad()
 
                     with torch.set_grad_enabled(True):
                         [outputs1, outputs2] = model(inputs)
                         if WNetPhase == "firstU":
-                            loss = self.calc_loss_sparse(outputs1, targets, samples, metrics, num_samples)
+                            loss = self.calc_loss_sparse(outputs1, targets, loss_samples, metrics, num_samples)
                         else:
-                            loss = self.calc_loss_sparse(outputs2, targets, samples, metrics, num_samples)
+                            loss = self.calc_loss_sparse(outputs2, targets, loss_samples, metrics, num_samples)
 
                         loss.backward()
                         optimizer.step()
@@ -199,8 +192,9 @@ class RadioWNetTrainer:
             self.writer.add_scalar('Loss/train', avg_train_loss, epoch)
 
             # 验证阶段
-            avg_val_loss = self.evaluate(model, val_loader, WNetPhase, targetType, num_samples)
-            self.writer.add_scalar('Loss/val', avg_val_loss, epoch)
+            if (epoch + 1) % save_interval == 0:
+                avg_val_loss = self.evaluate(model, val_loader, WNetPhase, targetType, num_samples)
+                self.writer.add_scalar('Loss/val', avg_val_loss, epoch)
 
             # 保存最佳模型
             if avg_val_loss < best_loss:

@@ -220,13 +220,16 @@ class RadioWNet(nn.Module):
         return [output1,output2]
     
 
-def RadioWNet_test():
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    get_gpu_info = gpu_statistic(device)
-    x = torch.randn(16, 16, 128, 128)
-    model = RadioWNet(inputs=4, phase="secondU")
 
-    print(summary(model, input_size=(4, 256,256)))
+
+def RadioWNet_test():
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    get_gpu_info = gpu_statistic(device)
+    x = torch.randn(16, 2, 256, 256)
+    # firstU secondU
+    model = RadioWNet(inputs=2, phase="firstU")
+
+    get_gpu_info.print_gpu_memory("RadioWNet", x, model)
 
 if __name__ == '__main__':
     RadioWNet_test()

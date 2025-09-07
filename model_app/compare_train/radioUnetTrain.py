@@ -191,5 +191,114 @@ if __name__ == "__main__":
 
 
 
+def calc_loss_dense(pred, target, metrics):
+
+    criterion = nn.MSELoss()
+    loss = criterion(pred, target)
+    metrics['loss'] += loss.data.cpu().numpy() * target.size(0)
+
+    return loss
+
+def calc_loss_sparse(pred, target, samples, metrics, num_samples):
+    # 喔是为了将原来除以所有点的数乘回来
+    criterion = nn.MSELoss()
+    loss = criterion(samples*pred, samples*target)*(256**2)/num_samples
+    metrics['loss'] += loss.data.cpu().numpy() * target.size(0)
+
+    return loss
+
+def train_model(model, dataloaders, optimizer, scheduler, num_epochs=50, WNetPhase="firstU", targetType="dense", num_samples=300):
+    # WNetPhase: traine first U and freez second ("firstU"), or vice verse ("secondU").
+    # targetType: train against dense images ("dense") or sparse measurements ("sparse")
+    best_model_wts = copy.deepcopy(model.state_dict())
+    best_loss = 1e10
+
+    for epoch in range(num_epochs):
+        print('Epoch {}/{}'.format(epoch, num_epochs - 1))
+        print('-' * 10)
+
+        since = time.time()
+
+        # Each epoch has a training and validation phase
+        for phase in ['train', 'val']:
+            if phase == 'train':
+                scheduler.step()
+                for param_group in optimizer.param_groups:
+                    print("learning rate", param_group['lr'])
+
+                model.train()  # Set model to training mode
+            else:
+                model.eval()   # Set model to evaluate mode
+
+            metrics = defaultdict(float)
+            epoch_samples = 0
+
+            if targetType=="dense":
+                for inputs, targets in dataloaders[phase]:
+                    inputs = inputs.to(device)
+                    targets = targets.to(device)
+
+                    # zero the parameter gradients
+                    optimizer.zero_grad()
+
+                    # forward
+                    # track history if only in train
+                    with torch.set_grad_enabled(phase == 'train'):
+                        [outputs1,outputs2] = model(inputs)
+                        if WNetPhase=="firstU":
+                            loss = calc_loss_dense(outputs1, targets, metrics)
+                        else:
+                            loss = calc_loss_dense(outputs2, targets, metrics)
+
+                        # backward + optimize only if in training phase
+                        if phase == 'train':
+                            loss.backward()
+                            optimizer.step()
+
+                    # statistics
+                    epoch_samples += inputs.size(0)
+            elif targetType=="sparse":
+                for inputs, targets, samples in dataloaders[phase]:
+                    inputs = inputs.to(device)
+                    targets = targets.to(device)
+                    samples = samples.to(device)
+
+                    # zero the parameter gradients
+                    optimizer.zero_grad()
+
+                    # forward
+                    # track history if only in train
+                    with torch.set_grad_enabled(phase == 'train'):
+                        [outputs1,outputs2] = model(inputs)
+                        if WNetPhase=="firstU":
+                            loss = calc_loss_sparse(outputs1, targets, samples, metrics, num_samples)
+                        else:
+                            loss = calc_loss_sparse(outputs2, targets, samples, metrics, num_samples)
+
+                        # backward + optimize only if in training phase
+                        if phase == 'train':
+                            loss.backward()
+                            optimizer.step()
+
+                    # statistics
+                    epoch_samples += inputs.size(0)
+
+
+            epoch_loss = metrics['loss'] / epoch_samples
+
+            # deep copy the model
+            if phase == 'val' and epoch_loss < best_loss:
+                print("saving best model")
+                best_loss = epoch_loss
+                best_model_wts = copy.deepcopy(model.state_dict())
+
+        time_elapsed = time.time() - since
+        print('{:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+
+    print('Best val loss: {:4f}'.format(best_loss))
+
+    # load best model weights
+    model.load_state_dict(best_model_wts)
+    return model
 
 

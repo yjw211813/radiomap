@@ -8,19 +8,11 @@ from data.radioSeerRead import create_dataloaders
 
 if __name__ == '__main__':
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-    torch.set_default_dtype(torch.float32)
     train_batch_size = 16  # 批次大小
     val_batch_size = 16
-    test_batch_size = 8  # 批次大小
-    # h5_path = r"/home/data/path_loss_data/RadioSeer/radiomap_data.h5"
-    # dataloaders = create_dataloaders(
-    #     h5_path=h5_path,
-    #     train_batch_size=train_batch_size,
-    #     val_batch_size=val_batch_size,
-    #     test_batch_size=test_batch_size,
-    #     num_workers=4
-    # )
-    
+    test_batch_size = 4  # 批次大小
+
+
     simuSetDict = {
         "ind1": 0,  # 起始索引
         "ind2": 0,  # 末尾索引
@@ -41,7 +33,6 @@ if __name__ == '__main__':
         "sample_flag": True,    # 是否有采样输入
         "loss_samples_flag":False,# 是否定义loss为稀疏采样loss
     }
-
     # 加载数据集
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
     Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
@@ -56,9 +47,9 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
 
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/MS_no_cars256/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/MS_no_cars256/'  # log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"  # 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"  # 模型存储位置
 
     os.makedirs(model_save_dir, exist_ok=True)
 
@@ -67,17 +58,18 @@ if __name__ == '__main__':
 
     BTM_ghost_UNet_input_shape = [5, 256, 256]
     BTM_ghost_UNet_output_shape = [1, 256, 256]
-    C_down_list =  [32, 64, 128, 256]
+    C_down_list = [32, 64, 128, 256]
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
-    attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-    model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params)
+    attn_params = [C_list_attn * 2, C_list_attn, C_list_attn // 2, C_list_attn // 2]
+    model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape, C_down_list, attn_params)
 
     # 定义训练对象
     warmup_epochs = 4
     total_epoch = 80
-    start_epoch = 3
+    start_epoch = 0
 
-    app = Unet_BTM_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
-    load_epoch = 0
+    app = Unet_BTM_app(start_epoch, log_dir, warmup_epochs, model_save_dir, device)
+    load_epoch = 36
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/MS_no_cars256/"
-    app.train(model, train_loader, val_loader, total_epoch)
+    # app.train(model, train_loader, val_loader, total_epoch)
+    app.test(model, load_epoch, test_loader, val_dir)

@@ -5,8 +5,9 @@ import os
 ##  在多尺度卷积基础上，将多尺度卷积引入到分形网络中
 # 获取上级目录
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-from model.sub_block.top_conv import SK_Channel_atten2D
-from model.sub_block.mid_conv import Conv_DownSampling2D,Fractal_multi_scale2D,ConvTranspose_UpSam,multi_scale_block2D
+from model.sub_block.top_conv import SK_Channel_atten2D,fractal_conv
+from model.sub_block.mid_conv import inception_ghost_sum,inception_sum
+from model.sub_block.low_conv import multiScaleConvDown,multiScaleUpSample
 from torch.nn import functional as F
 
 
@@ -27,9 +28,9 @@ class BTM_Net(nn.Module):
         C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
         # 构建编码器
         layers = []
-        layers.append(multi_scale_block2D(C_in=self.input_channel, C_out=C_list[0], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
+        layers.append(inception_ghost_sum(C_in=self.input_channel, C_out=C_list[0], kernel_list=[1, 3, 5, 7], dilated_list=[1,1,1,1]))
         for i in range(len(C_list) - 1):
-            layers.append(multi_scale_block2D(C_in=C_list[i], C_out=C_list[i + 1], kernel_sizes=[1, 3, 5, 7], dilated_num=1))
+            layers.append(inception_ghost_sum(C_in=C_list[i], C_out=C_list[i + 1], kernel_list=[1, 3, 5, 7],  dilated_list=[1,1,1,1]))
         self.encoder = nn.Sequential(*layers)
         self.gelu = nn.GELU()
 
@@ -53,13 +54,13 @@ class Unet_BTM(nn.Module):
         in_ch = self.input_channel
         for out_ch in C_down_list:
             self.encoder.append(nn.Sequential(
-                multi_scale_block2D(C_in=in_ch, C_out=out_ch, kernel_sizes=kernel_sizes, dilated_num=1),
-                Conv_DownSampling2D(out_ch)
+                inception_ghost_sum(C_in=in_ch, C_out=out_ch,  kernel_list=[1, 3, 5, 7], dilated_list=[1,1,1,1]),
+                multiScaleConvDown(out_ch,kernel_sizes)
             ))
             in_ch = out_ch
 
         # 中心卷积层
-        self.conv_center = Fractal_multi_scale2D(input_channel=C_down_list[-1],output_channel=C_down_list[-1])
+        self.conv_center = fractal_conv(C_in=C_down_list[-1],C_out=C_down_list[-1],kernel_list = [1, 3, 5, 7],dilated_list = [1,1,1,1],inception_module = inception_sum)
 
         # 创建上采样路径（解码器）
         self.decodes = nn.ModuleList()
@@ -67,8 +68,8 @@ class Unet_BTM(nn.Module):
             i = i -1
             self.decodes.append(
                 nn.Sequential(
-                    multi_scale_block2D(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i],kernel_sizes=kernel_sizes,dilated_num=1),
-                    ConvTranspose_UpSam(C_down_list[i])
+                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i], kernel_list=[1, 3, 5, 7], dilated_list=[1,1,1,1]),
+                    multiScaleUpSample(C_down_list[i],kernel_sizes,factor=0.5)
                 )
             )
         # 创建注意力模块
@@ -135,10 +136,10 @@ class Unet_BTM(nn.Module):
 def Unet_BTM_test():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)
-    batch_size = 8
+    batch_size = 2
     feature_num = 4
-    img_H = 256
-    img_W = 256
+    img_H = 32
+    img_W = 32
     input_data = torch.randn(batch_size, 4, img_H, img_W).to(device)
 
     BTM_ghost_UNet_input_shape = [input_data.shape[1], input_data.shape[2], input_data.shape[3]]

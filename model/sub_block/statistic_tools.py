@@ -49,6 +49,60 @@ class gpu_statistic():
         print("Input shape:", x.shape)
         print("Output shape:", output.shape)
 
+    def print_gpu_memory(self,description,x,model,temb = None,condition = None):
+        print(description)
+        # 清空GPU缓存并记录初始显存
+        torch.cuda.empty_cache()
+        initial_memory = torch.cuda.memory_allocated(self.device) / 1024 ** 2  # MB
+        print(f"初始显存占用: {initial_memory:.2f} MB")
+        if temb is None:
+            x = x.to(self.device)
+        elif condition is None:
+            x = x.to(self.device)
+            temb = temb.to(self.device)
+        else:
+            x = x.to(self.device)
+            temb = temb.to(self.device)
+            condition = condition.to(self.device)
+        input_memory = torch.cuda.memory_allocated(self.device) / 1024 ** 2 - initial_memory
+        print(f"输入张量显存占用: {input_memory:.2f} MB")
+        model.to(self.device)
+        model_memory = torch.cuda.memory_allocated(self.device) / 1024 ** 2 - initial_memory - input_memory
+        print(f"模型参数显存占用: {model_memory:.2f} MB")
+        # 前向传播
+        start_time = time.time()
+        if temb is None:
+            output = model(x)
+        elif condition is None:
+            output = model(x, temb)
+        else:
+            output = model(x, temb, condition)
+        forward_time = time.time() - start_time
+        print(f"前向传播时间: {forward_time:.4f} 秒")
+
+        forward_memory = torch.cuda.memory_allocated(self.device) / 1024 ** 2 - initial_memory - input_memory - model_memory
+        print(f"前向传播中间变量显存占用: {forward_memory:.2f} MB")
+        # 统计信息
+        total_memory = torch.cuda.memory_allocated(self.device) / 1024 ** 2
+        print(f"总显存占用: {total_memory:.2f} MB")
+
+        # 峰值显存使用
+        peak_memory = torch.cuda.max_memory_allocated(self.device) / 1024 ** 2
+        print(f"峰值显存使用: {peak_memory:.2f} MB")
+
+        print("Input shape:", x.shape)
+        if isinstance(output, list):
+            if len(output) > 0:
+                print("Output is a list with first element shape:", output[0].shape)
+                print(f"List length: {len(output)}")
+                for i, item in enumerate(output):
+                    print(f"Output[{i}] shape: {item.shape}")
+            else:
+                print("Output is an empty list")
+        else:
+            print("Output shape:", output.shape)
+
+
 # if __name__ == '__main__':
 #
 #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

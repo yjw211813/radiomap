@@ -337,7 +337,7 @@ def ConvTranspose_test():
 
 
 class multiScaleUpSample(nn.Module):
-    def __init__(self, C_in, kernel_list):
+    def __init__(self, C_in, kernel_list,factor = 1):
         super(multiScaleUpSample, self).__init__()
         # Initialize ModuleList for transposed convolutions
         self.t_ups = nn.ModuleList()
@@ -345,7 +345,7 @@ class multiScaleUpSample(nn.Module):
             self.t_ups.append(
                 nn.ConvTranspose2d(
                     C_in,
-                    C_in,
+                    int(C_in * factor) ,
                     kernel_size,
                     stride=2,
                     padding=kernel_size // 2,
@@ -353,7 +353,7 @@ class multiScaleUpSample(nn.Module):
                 )
             )
         # Single convolution layer after combining outputs
-        self.conv = nn.Conv2d(C_in, C_in, 3, stride=1, padding=1)
+        self.conv = nn.Conv2d(int(C_in* factor), int(C_in* factor), 3, stride=1, padding=1)
 
     def forward(self, x, temb=None, cemb=None):
         out = None

@@ -233,6 +233,24 @@ class RadioMapSeerLoader(Dataset):
         else:
             return io.imread(img_path) / 256
 
+    def _get_loss_samples(self):
+
+        loss_samples = np.zeros((self.height, self.width))
+
+        # 确定采样点数
+        if self.fix_samples == 0:  # 随机采样点数
+            num_samples = np.random.randint(self.num_samples_low, self.num_samples_high)
+        else:  # 固定采样点数
+            num_samples = int(self.fix_samples)
+
+        # 生成随机采样点
+        x_samples = np.random.randint(0, self.height, size=num_samples)
+        y_samples = np.random.randint(0, self.width, size=num_samples)
+
+        loss_samples[x_samples, y_samples] = 1
+
+        return loss_samples
+
     def fusing_building(self,interpolate_data,image_buildings):
         mask = image_buildings > 0
         interpolate_data[mask] = 0
@@ -282,10 +300,14 @@ class RadioMapSeerLoader(Dataset):
                 input_layers[-2] = self.fusing_cars(input_layers[-2],image_cars)
 
         inputs = np.stack(input_layers, axis=2)
-
         # 应用数据转换
         if self.transform:
             inputs = self.transform(inputs).type(torch.float32)
             image_gain = self.transform(image_gain).type(torch.float32)
+        if self.loss_samples_flag:
+            loss_samples = self._get_loss_samples()
+            if self.transform:
+                loss_samples = self.transform(loss_samples).type(torch.float32)
+            return inputs, image_gain ,loss_samples
 
         return inputs, image_gain
