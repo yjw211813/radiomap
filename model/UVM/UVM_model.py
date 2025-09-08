@@ -2,7 +2,7 @@
 
 from unet_part import *
 
-
+from model.sub_block.statistic_tools import gpu_statistic
 class UNet(nn.Module):
     def __init__(self, n_channels, bilinear=True):
         super(UNet, self).__init__()
@@ -35,9 +35,15 @@ class UNet(nn.Module):
         x = self.outc(x) + inp
         return x
 
-data = torch.randn(2, 3, 128, 128).to("cuda:0")
 
-model = UNet(n_channels=3).to("cuda:0")
+def test_UNet():
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    get_gpu_info = gpu_statistic(device)
+    c, w, h = 3, 128,128
+    model =UNet(n_channels=3)  # 先在CPU创建
+    x = torch.randn(2, c, w, h, requires_grad=True)
 
+    get_gpu_info.print_gpu_memory("UVMB GPU info", x, model)
 
-print(model(data).shape)
+if __name__ == "__main__":
+    test_UNet()

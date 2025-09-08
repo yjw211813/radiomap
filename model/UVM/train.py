@@ -6,9 +6,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from utils.dataset_utils import TrainDataset
-from net.model import UNet
-from utils.schedulers import LinearWarmupCosineAnnealingLR
+from model.UVM.dataset_utils import TrainDataset
+from model.UVM.UVM_model import UNet
+from model.UVM.schedulers import LinearWarmupCosineAnnealingLR
 import numpy as np
 import wandb
 from options import options as opt

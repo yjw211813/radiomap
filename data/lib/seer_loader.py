@@ -10,7 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils, datasets, models
 import warnings
 from scipy.spatial import cKDTree
-
+from scipy.optimize import curve_fit
 
 # dir_gainDPM="gain/DPM/",
 # dir_gainDPMcars="gain/carsDPM/",
@@ -27,6 +27,26 @@ class RadioMapSeerLoader(Dataset):
                  maps_inds=np.zeros(1),  # 可选的地图索引序列，默认为0（使用标准划分）
                  phase="train",  # 数据集阶段："train", "val", "test", "custom"
                  transform=transforms.ToTensor()):
+
+        self.ind1 = 0  # 起始索引
+        self.ind2 = 0  # 末尾索引
+        self.dir_dataset = r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/"  # 数据集文件夹
+        self.numTx = 80  # 信源数量设定
+        self.thresh = 0.05  # 环境噪声
+        self.simulation = "rand"  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+        self.carsSimul = "yes"  # 是否开启小车作为仿真
+        self.carsInput = "yes"  # 是否将小车图作为模型输入
+        self.IRT2maxW = 0.3  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+        self.cityMap = "complete"  # 是否输入完全的城市地图
+        self.missing = 1  # 地图缺失号码
+        self.fix_samples = 300  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+        self.num_samples_low = 10  # 最低采样数
+        self.num_samples_high = 300  # 最高采样数
+        self.inter_flag = True  # 看是否需要插值图像
+        self.scale256_flag = False  # 取值范围是否为0 - 255
+        self.sample_flag = True  # 是否有采样输入
+        self.loss_samples_flag = False  # 是否定义loss为稀疏采样loss
+        self.formula_flag = False
 
         self.scale256_flag = False
         # 将设置字典中的参数转为类属性
@@ -45,6 +65,9 @@ class RadioMapSeerLoader(Dataset):
         self.height = 256
         self.width = 256
 
+        self.arr = np.arange(256)
+        self.one = np.ones(256)
+        self.img_temp = np.outer(self.arr,self.one)
 
     def _init_index(self, maps_inds, phase):
         """初始化地图索引和数据集范围"""
@@ -263,6 +286,8 @@ class RadioMapSeerLoader(Dataset):
 
         return interpolate_data
 
+    def objective(self, x, theta, c):
+        return c - 10 * theta * x
 
     def __len__(self):
         return (self.ind2 - self.ind1 + 1) * self.numTx
@@ -281,15 +306,31 @@ class RadioMapSeerLoader(Dataset):
 
         if self.sample_flag == True:
             input_samples = self.create_input_samples(image_gain)
+            if self.formula_flag == True:
+
+                xk, yk = np.where(input_samples != 0)
+                xk, yk = xk.reshape(xk.shape[0], 1), yk.reshape(yk.shape[0], 1)
+                p, q = np.where(image_Tx != 0)
+
+                x = np.log10(np.sqrt(np.square(xk - p) + np.square(yk - q)) + 1e-30).flatten()
+                y = input_samples[xk, yk].flatten()
+
+                pop, _ = curve_fit(self.objective, x, y)
+                theta, c = pop
+                genImg = c - 10 * theta * np.log10(np.sqrt(np.square(p - self.img_temp) + np.square(q - self.img_temp.T)) + 1e-30)
+
+
 
             if self.inter_flag == True:
-                interpolate_data = self.idw_interpolate_sample(input_samples, k=5)
 
+                interpolate_data = self.idw_interpolate_sample(input_samples, k=5)
                 interpolate_data =self.fusing_building(interpolate_data,image_buildings)
 
-                input_layers = [image_buildings, image_Tx, input_samples, interpolate_data]
+                input_layers = [image_buildings, image_Tx, input_samples, genImg, interpolate_data]
             else:
-                input_layers = [image_buildings, image_Tx, input_samples]
+                input_layers = [image_buildings, image_Tx, input_samples, genImg]
+
+
         else:
             input_layers = [image_buildings, image_Tx]
         # 添加车辆通道（如果需要）
@@ -298,6 +339,10 @@ class RadioMapSeerLoader(Dataset):
             input_layers.append(image_cars)
             if self.sample_flag == True and self.inter_flag == True:
                 input_layers[-2] = self.fusing_cars(input_layers[-2],image_cars)
+
+
+
+
 
         inputs = np.stack(input_layers, axis=2)
         # 应用数据转换

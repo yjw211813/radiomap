@@ -40,6 +40,7 @@ if __name__ == '__main__':
         "scale256_flag": False,  # 取值范围是否为0 - 255
         "sample_flag": True,    # 是否有采样输入
         "loss_samples_flag":False,# 是否定义loss为稀疏采样loss
+        "formula_flag":False
     }
 
     # 加载数据集

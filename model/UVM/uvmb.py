@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from mamba_ssm import Mamba
 import torch.cuda as cuda
+from model.sub_block.statistic_tools import gpu_statistic
+
 class UVMB(nn.Module):
     def __init__(self,c=3,w=256,h=256):
         super().__init__()
@@ -35,7 +37,7 @@ class UVMB(nn.Module):
         )
         self.smooth = nn.Conv2d(in_channels=c, out_channels=c, kernel_size=3, stride=1, padding=1)
         self.ln = nn.LayerNorm(normalized_shape=c)
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim=1)
     def forward(self, x):
         b,c,w,h = x.shape
         x = self.convb(x) + x
@@ -49,20 +51,13 @@ class UVMB(nn.Module):
 
 
 def test_UVMB():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(device)
-    # 1. 初始化模型（自动并行化处理）
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    get_gpu_info = gpu_statistic(device)
     c, w, h = 3, 128,128
-    print(f"初始化前显存: {cuda.memory_allocated() / 1024 ** 2:.2f} MB")
     model = UVMB(c=3, w=w, h=h)  # 先在CPU创建
-    model = model.to(device)  # 再移到GPU
-    print(f"初始化后显存: {cuda.memory_allocated() / 1024 ** 2:.2f} MB")
-    # 2. 输入数据生成（确保requires_grad一致性）
-    x = torch.randn(1, c, w, h, requires_grad=True).to(device)
-    print(x.shape)
-    output = model(x)
-    print(output.shape)
+    x = torch.randn(1, c, w, h, requires_grad=True)
 
+    get_gpu_info.print_gpu_memory("UVMB GPU info", x, model)
 
 
 

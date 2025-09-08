@@ -66,7 +66,7 @@ sudo ./cuda_12.2.2_535.104.05_linux.run
 
 sudo adduser jinshidong
 sudo usermod -aG docker jinshidong
-
+sudo usermod -aG sudo liaozhengyan
 然后使用pinns进行embedding
 利用fft来辅助构造loss函数
 
@@ -213,4 +213,5 @@ radioUnet 代码
 代码 需要加上 损失相关分开计算逻辑
 并且加上最优权重保存逻辑
 
-
+在离线下安装环境
+pip install --no-index --no-deps --find-links .
