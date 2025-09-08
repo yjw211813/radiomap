@@ -159,7 +159,8 @@ set PYTHONPATH=C:\Users\Administrator\Desktop\notebook\second_paper\radio_map_co
 set PYTHONPATH=C:\Users\Administrator\Desktop\radiomap\radio_map_construction
 
 set PYTHONPATH=/home/code/radioMap
-
+set PYTHONPATH=/mnt/c/Users/Administrator/Desktop/second/EM_simulation_sys
+set PYTHONPATH=/mnt/c/Users/Administrator/Desktop/second/OperationSubSystem
 lightning 框架
 
 # 9月4号新问题 今天在未来城跑下面代码的实验
@@ -221,4 +222,4 @@ radioUnet 代码
 并且加上最优权重保存逻辑
 
 在离线下安装环境
-pip install --no-index --no-deps --find-links .
+pip install --no-index --no-deps --find-links *.whl

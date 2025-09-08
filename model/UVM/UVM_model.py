@@ -19,7 +19,7 @@ class UNet(nn.Module):
         self.up2 = Up(512, 256 // factor, bilinear)
         self.up3 = Up(256, 128 // factor, bilinear)
         self.up4 = Up(128, 64, bilinear)
-        self.outc = OutConv(64, 3)
+        self.outc = OutConv(64, n_channels)
 
     def forward(self, inp):
         x = inp
@@ -39,8 +39,8 @@ class UNet(nn.Module):
 def test_UNet():
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
     get_gpu_info = gpu_statistic(device)
-    c, w, h = 3, 128,128
-    model =UNet(n_channels=3)  # 先在CPU创建
+    c, w, h = 5, 128,128
+    model =UNet(n_channels=c)  # 先在CPU创建
     x = torch.randn(2, c, w, h, requires_grad=True)
 
     get_gpu_info.print_gpu_memory("UVMB GPU info", x, model)
