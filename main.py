@@ -11,7 +11,7 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     train_batch_size = 16  # 批次大小
     val_batch_size = 16
-    test_batch_size = 8  # 批次大小
+    test_batch_size = 8  # 批次大小1
     # h5_path = r"/home/data/path_loss_data/RadioSeer/radiomap_data.h5"
     # dataloaders = create_dataloaders(
     #     h5_path=h5_path,
