@@ -1,4 +1,4 @@
-from model_app.compare_train.reconstruct_radioUnet import RadioWNet_app
+from model_app.radioUnetAPP import RadioWNet_app
 import torch
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
