@@ -21,44 +21,44 @@ import torchvision
 import math
 import re
 
-def get_dataset():
-    simuSetDict = {
-        "ind1": 0,  # 起始索引
-        "ind2": 0,  # 末尾索引
-        "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
-        "numTx": 80,  # 信源数量设定
-        "thresh": 0.05,  # 环境噪声
-        "simulation": "DPM",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
-        "carsSimul": "no",  # 是否开启小车作为仿真
-        "carsInput": "no",  # 是否将小车图作为模型输入
-        "IRT2maxW": 1,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
-        "cityMap": "complete",  # 是否输入完全的城市地图
-        "missing": 1,  # 地图缺失号码
-        "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
-        "num_samples_low": 10,  # 最低采样数
-        "num_samples_high": 300,  # 最高采样数
-        "inter_flag": False,  # 看是否需要插值图像
-        "sample_flag": False,
-        "scale256_flag": False,  # 取值范围是否为0 - 255
-        "loss_samples_flag":False,# 是否定义loss为稀疏采样loss
-    }
-    # 加载数据集
-    Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
-
-
-    Radio_val = RadioMapSeerLoader(phase="val")
-    Radio_test = RadioMapSeerLoader(phase="test")
-
-    image_datasets = {
-        'train': Radio_train, 'val': Radio_val,'test': Radio_test
-    }
-
-    batch_size = 15
-
-    dataloaders = {
-        'train': DataLoader(Radio_train, batch_size=batch_size, shuffle=True, num_workers=1),
-        'val': DataLoader(Radio_val, batch_size=batch_size, shuffle=True, num_workers=1)
-    }
+# def get_dataset():
+#     simuSetDict = {
+#         "ind1": 0,  # 起始索引
+#         "ind2": 0,  # 末尾索引
+#         "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
+#         "numTx": 80,  # 信源数量设定
+#         "thresh": 0.05,  # 环境噪声
+#         "simulation": "DPM",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+#         "carsSimul": "no",  # 是否开启小车作为仿真
+#         "carsInput": "no",  # 是否将小车图作为模型输入
+#         "IRT2maxW": 1,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+#         "cityMap": "complete",  # 是否输入完全的城市地图
+#         "missing": 1,  # 地图缺失号码
+#         "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+#         "num_samples_low": 10,  # 最低采样数
+#         "num_samples_high": 300,  # 最高采样数
+#         "inter_flag": False,  # 看是否需要插值图像
+#         "sample_flag": False,
+#         "scale256_flag": False,  # 取值范围是否为0 - 255
+#         "loss_samples_flag":False,# 是否定义loss为稀疏采样loss
+#     }
+#     # 加载数据集
+#     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
+#
+#
+#     Radio_val = RadioMapSeerLoader(phase="val")
+#     Radio_test = RadioMapSeerLoader(phase="test")
+#
+#     image_datasets = {
+#         'train': Radio_train, 'val': Radio_val,'test': Radio_test
+#     }
+#
+#     batch_size = 15
+#
+#     dataloaders = {
+#         'train': DataLoader(Radio_train, batch_size=batch_size, shuffle=True, num_workers=1),
+#         'val': DataLoader(Radio_val, batch_size=batch_size, shuffle=True, num_workers=1)
+#     }
 
 class RadioWNet_app():
     def __init__(self, start_epoch, log_dir, step_size, model_save_dir,device,num_loss_samples = 300):

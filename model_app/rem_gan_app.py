@@ -1,16 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 REM-GAN模型训练脚本
-
-优化内容：
-1. 增加详细注释，提高代码可读性
-2. 优化设备管理，使其更灵活
-3. 改进梯度计算函数，使用更高效的实现
-4. 重构训练循环，提高代码清晰度
-5. 优化超参数管理
-6. 改进损失计算和记录方式
-7. 增强模型保存和恢复功能
-
 @author: Achintha
 """
 
@@ -38,7 +28,7 @@ from skimage.segmentation import slic
 import scipy.stats as stats
 
 # 超参数配置
-TV_WEIGHT = 1e-7
+TV_WEIGHT = 1e-7# 总变差损失的权重
 BATCH_SIZE = 30
 EPOCHS = 50
 LEARNING_RATE = 0.001
@@ -67,7 +57,7 @@ class GANTrainer:
         """
         self.device = torch.device(device)
         self.batch_size = batch_size
-        self.n_segments = 100
+        self.n_segments = 100    # 超像素分割的数量
         self.phase = phase
         self.experiment_path = experiment_path
 
@@ -85,30 +75,31 @@ class GANTrainer:
         self.optimD = optim.Adam(self.netD.parameters(), lr=LEARNING_RATE, betas=(0.9, 0.999))
 
         # 定义损失函数
-        self.lossD = nn.BCEWithLogitsLoss()
-        self.lossG = nn.MSELoss()
-        self.lossGS = nn.CosineSimilarity(dim=1, eps=1e-08)
-        self.lossMsSSIM = loss.MS_SSIM_L1_LOSS()
-        self.lossL1 = nn.L1Loss()
+        self.lossD = nn.BCEWithLogitsLoss()# 判别器损失
+        self.lossG = nn.MSELoss()# 生成器的MSE损失
+        self.lossGS = nn.CosineSimilarity(dim=1, eps=1e-08)# 余弦相似度损失
+        self.lossMsSSIM = loss.MS_SSIM_L1_LOSS()# MS-SSIM + L1损失
+        self.lossL1 = nn.L1Loss()# L1损失
 
         # 训练历史记录
         self.loss_history = {
-            'D': [], 'G': [], 'MSE': [],
-            'D_avg': [], 'G_avg': [], 'MSE_avg': [],
-            'val_loss': []
+            'D': [], 'G': [], 'MSE': [],# 每个batch的损失
+            'D_avg': [], 'G_avg': [], 'MSE_avg': [],# 每个epoch的平均损失
+            'val_loss': []# 验证损失
         }
 
         # 创建实验目录
         os.makedirs(experiment_path, exist_ok=True)
 
     def tv_loss(self, y_hat):
-        """计算总变差损失"""
+        """计算总变差损失，用于平滑生成的图像"""
         diff_i = torch.sum(torch.abs(y_hat[:, :, :, 1:] - y_hat[:, :, :, :-1]))
         diff_j = torch.sum(torch.abs(y_hat[:, :, 1:, :] - y_hat[:, :, :-1, :]))
         return TV_WEIGHT * (diff_i + diff_j)
 
     def compute_gradients(self, img):
-        """计算批次图像的梯度"""
+        """计算批次图像的梯度，用于梯度相似度损失"""
+
         # 确保输入是4D张量
         assert img.dim() == 4, "Input must be a 4D tensor [batch, channel, height, width]"
 
@@ -132,35 +123,39 @@ class GANTrainer:
         return torch.cat([G_x, G_y, G_xy, G_yx], dim=1)
 
     def power_spectrum_loss(self, images, E=100):
-        """计算功率谱损失"""
+        """计算功率谱损失，用于保持频谱特性"""
+        # 将图像从GPU移动到CPU并转换为numpy数组
         image = images.detach().cpu().numpy().astype(int)
-        npix = images.shape[1]
+        npix = images.shape[1]# 获取图像尺寸
 
         # 计算傅里叶变换和功率谱
-        fourier_image = np.fft.fftn(image)
-        fourier_amplitudes = np.abs(fourier_image) ** 2
+        fourier_image = np.fft.fftn(image) # 对图像进行N维傅里叶变换
+        fourier_amplitudes = np.abs(fourier_image) ** 2# 计算功率谱（振幅的平方）
 
         # 计算频率
-        kfreq = np.fft.fftfreq(npix) * npix
-        kfreq2D = np.meshgrid(kfreq, kfreq)
-        knrm = np.sqrt(kfreq2D[0] ** 2 + kfreq2D[1] ** 2)
+        kfreq = np.fft.fftfreq(npix) * npix # 获取频率值并缩放到像素单位
+        kfreq2D = np.meshgrid(kfreq, kfreq)# 创建二维频率网格
+        knrm = np.sqrt(kfreq2D[0] ** 2 + kfreq2D[1] ** 2)# 计算每个频率点的模
 
-        # 扁平化处理
+        # 扁平化处理以便进行统计分析
         knrm = knrm.flatten()
         fourier_amplitudes = fourier_amplitudes.reshape(images.shape[0], -1)
 
-        # 计算分箱统计
-        kbins = np.arange(0.5, npix // 2 + 1, 1.)
-        kvals = 0.5 * (kbins[1:] + kbins[:-1])
+        # 计算分箱统计 - 将频率按半径分箱并计算每个箱内的平均功率
+        kbins = np.arange(0.5, npix // 2 + 1, 1.)# 创建分箱边界
+        kvals = 0.5 * (kbins[1:] + kbins[:-1]) # 计算每个箱的中心值
 
+        # 对功率谱按频率模数进行分箱统计
         Abins, _, _ = stats.binned_statistic(knrm, fourier_amplitudes,
                                              statistic="mean",
                                              bins=kbins)
+        # 考虑二维空间的面积元素（环形区域面积）
         Abins *= np.pi * (kbins[1:] ** 2 - kbins[:-1] ** 2)
 
-        # 获取前E个最重要的频率分量
+        # 获取前E个最重要的频率分量（功率最大的频率区间）
         ind = np.argpartition(Abins, E)
         return torch.FloatTensor(ind).to(self.device)
+
 
     def one_hot_encode(self, labels, n_classes):
         """将标签转换为one-hot编码"""

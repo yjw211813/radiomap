@@ -211,9 +211,9 @@ tmux kill-session -t liaozhengyan
 
 需要验证的模型
 给输出进行预处理一个
-radioUnet
+
 REMGAN
-UVM
+
 再写一个简单网络看能否训练得起来 模块应该先简单，慢慢往上累加？√
 
 # 2025年9月5日更改
@@ -223,3 +223,14 @@ radioUnet 代码
 
 在离线下安装环境
 pip install --no-index --no-deps --find-links *.whl
+
+# 2025年9月10日
+现在应该把REMGAN相关代码按照我的逻辑进行相关训练测试代码处理
+写几个简单的网络，一点点叠加训练
+我需要知道所有的代码演进过程 是否合理
+CNN      加中间叠加模块
+多尺度    加空间注意力
+多sum    
+
+# 中途加载功能  优化器调节  
+# 
