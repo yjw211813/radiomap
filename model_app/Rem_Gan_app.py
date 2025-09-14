@@ -58,7 +58,7 @@ class REM_GAN_app():
         self.lossD = nn.BCEWithLogitsLoss()  # 判别器损失
         self.lossG = nn.MSELoss()  # 生成器的MSE损失
         self.lossGS = nn.CosineSimilarity(dim=1, eps=1e-08)  # 余弦相似度损失
-        self.lossMsSSIM = MS_SSIM_L1_LOSS()  # MS-SSIM + L1损失
+        self.lossMsSSIM = MS_SSIM_L1_LOSS(self.device)  # MS-SSIM + L1损失
         self.lossL1 = nn.L1Loss()  # L1损失
         self.slic_block_num = model_app_dict['slic_block_num']# 超像素分割的数量
 
@@ -317,6 +317,7 @@ class REM_GAN_app():
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
 
                 up_sampled = inputs[:, 3, :, :].unsqueeze(1) # 得到公式相关图像 log对数拟合的图像
+                inputs = inputs[:, :3, :, :]
 
                 self.netG.train()
                 self.netD.train()
