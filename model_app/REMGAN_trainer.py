@@ -1,13 +1,10 @@
 import torch
 from model.rem_gan.loss import MS_SSIM_L1_LOSS
-
 import torch.nn as nn
-
 from tqdm import tqdm
 import torch.optim as optim
 from torch.optim import lr_scheduler
 import os
-import glob
 import shutil
 from torch.utils.tensorboard import SummaryWriter
 from torchmetrics.functional import peak_signal_noise_ratio as psnr
@@ -15,22 +12,15 @@ from torchmetrics.functional import structural_similarity_index_measure as ssim
 import matplotlib.pyplot as plt
 import torchvision
 import math
-import re
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import numpy as np
 import scipy.stats as stats
 from skimage.segmentation import slic
-import copy
 
 
 # 超参数配置
 TV_WEIGHT = 1e-7# 总变差损失的权重
-BATCH_SIZE = 30
-EPOCHS = 50
-LEARNING_RATE = 0.001
-LR_DECAY_EPOCHS = 25
-DEVICE_ID = 'cuda:3' if torch.cuda.is_available() else 'cpu'
 
 class REM_GAN_app():
     def __init__(self, model_app_dict,dataSetDict):
@@ -41,6 +31,7 @@ class REM_GAN_app():
         self.save_dir = model_app_dict['save_dir']
         self.log_dir = model_app_dict['log_dir']
         self.load_dir = model_app_dict['load_dir']
+        self.test_dir = model_app_dict['test_dir']
         self.phase = model_app_dict['phase']
         self.total_epoch = model_app_dict['total_epoch']
         os.makedirs(self.save_dir, exist_ok=True)
@@ -89,17 +80,6 @@ class REM_GAN_app():
         self.lossG_mean = []
         self.lossMSE_mean = []
         self.val_loss_mean = []
-
-
-
-       #  self.log_dir = log_dir
-       #
-       #  self.step_size = step_size
-
-
-       #  self.num_loss_samples = num_loss_samples
-
-
 
     def ohe_vector_from_labels(self,labels, n_classes):
         return F.one_hot(labels, num_classes=n_classes)
@@ -299,7 +279,7 @@ class REM_GAN_app():
     def train(self):
         # 初始化最佳损失和模型索引
         best_loss = float('inf')
-
+        save_interval = 1
 
         # 如果从中间epoch开始，加载检查点
         if self.start_epoch != 0:
@@ -351,7 +331,7 @@ class REM_GAN_app():
                     loss = self.lossG(fake,targets)
                     self.lossMSE_list.append(loss.data.cpu().numpy())
                     if number%100 == 0:
-                        print("epoch: ",epoch,' number: ',number,' MSE: ',np.mean(self.lossMSE))
+                        print("epoch: ",epoch,' number: ',number,' MSE: ',np.mean(self.lossMSE_list))
 
             # 计算 epoch 平均损失
             avg_lossD = np.mean(self.lossD_list)
@@ -391,10 +371,10 @@ class REM_GAN_app():
                     'schedulerD_state_dict': self.optimDscheduler.state_dict(),
                     'best_loss': best_loss
                 }
-                torch.save(checkpoint, os.path.join(self.model_save_dir, f"checkpoint_REMGAN_best.pth"))
+                torch.save(checkpoint, os.path.join(self.save_dir, f"checkpoint_REMGAN_best.pth"))
 
             # 定期保存检查点
-            if epoch % self.save_interval == 0:
+            if epoch % save_interval == 0:
                 checkpoint = {
                     'epoch': epoch,
                     'netG_state_dict': self.netG.state_dict(),
@@ -405,157 +385,217 @@ class REM_GAN_app():
                     'schedulerD_state_dict': self.optimDscheduler.state_dict(),
                     'best_loss': best_loss
                 }
-                torch.save(checkpoint, os.path.join(self.model_save_dir, f"checkpoint_REMGAN_epoch_{epoch}.pth"))
+                torch.save(checkpoint, os.path.join(self.save_dir, f"checkpoint_REMGAN_epoch_{epoch}.pth"))
                 print(f"Saved checkpoint at epoch {epoch}")
 
 
 
 
-    def predict(self, model, load_epoch, test_loader, val_dir,WNetPhase="secondU", targetType = "dense"):
+    def test(self):
+        """Test method for REMGAN that loads the best weights and performs testing"""
+        print("Predicting on test set with best weights")
 
-        print("predicting on test set")
+        # 加载最佳检查点
+        best_checkpoint_path = os.path.join(self.load_dir, "checkpoint_REMGAN_best.pth")
+        if os.path.exists(best_checkpoint_path):
+            checkpoint = torch.load(best_checkpoint_path, map_location=self.device)
+            self.netG.load_state_dict(checkpoint['netG_state_dict'])
+            self.netD.load_state_dict(checkpoint['netD_state_dict'])
+            print(
+                f"Loaded best model from epoch {checkpoint['epoch']} with validation loss: {checkpoint['best_loss']:.6f}")
+        else:
+            print("Warning: Best checkpoint not found. Using current model weights.")
 
-    def create_horizontal_comparison(self, outputs, targets, batch_idx, val_dir):
-        # 确保输入是numpy数组且形状正确
-        if torch.is_tensor(outputs):
-            outputs = outputs.cpu().numpy()
-        if torch.is_tensor(targets):
-            targets = targets.cpu().numpy()
+        # 设置模型为评估模式
+        self.netG.eval()
+        self.netD.eval()
 
-        # 移除通道维度 (batch_size, 1, H, W) -> (batch_size, H, W)
-        outputs = outputs.squeeze(1)
-        targets = targets.squeeze(1)
+        # 初始化指标
+        total_samples = 0
+        total_mse = 0.0
+        total_energy = 0.0
+        total_ssim = 0.0
+        total_psnr = 0.0
 
-        num_batches = outputs.shape[0]
+        # 创建保存目录
+        test_dir = os.path.join(self.test_dir, "test_results")
+        os.makedirs(test_dir, exist_ok=True)
+        # 用于绘制曲线的列表
+        batch_nmse_losses = []
+        batch_ssim_losses = []
+        batch_psnr_losses = []
+        batch_indices = []
 
-        # 创建一个大图像，包含所有批次的对比
-        fig, axes = plt.subplots(2, num_batches, figsize=(5 * num_batches, 10))
+        with torch.no_grad():
+            for batch_idx, (inputs, targets) in enumerate(tqdm(self.test_loader, desc="Testing", ncols=100, leave=False)):
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
 
-        # 处理只有1个批次的情况
-        if num_batches == 1:
-            axes = axes.reshape(2, 1)
+                # 生成器前向传播
+                fake = self.netG(inputs)
 
-        for i in range(num_batches):
-            # 获取当前批次的target和output
-            target_img = targets[i]
-            output_img = outputs[i]
+                batch_size = inputs.size(0)
+                total_samples += batch_size
 
-            # 显示target
-            ax = axes[0, i]
-            im = ax.imshow(target_img, cmap='jet')
-            ax.set_title(f"Target (Sample {i})")
-            ax.axis('off')
+                # 计算MSE
+                mse_batch = self.lossG(fake, targets)
+                total_mse += mse_batch.item() * batch_size
 
-            # 显示output
-            ax = axes[1, i]
-            im = ax.imshow(output_img, cmap='jet')
-            ax.set_title(f"Output (Sample {i})")
-            ax.axis('off')
+                # 计算能量（目标的L2范数平方）
+                energy_batch = torch.sum(targets ** 2) / batch_size
+                total_energy += energy_batch.item() * batch_size
 
-        # 添加一个共享的颜色条
-        cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-        fig.colorbar(im, cax=cbar_ax)
+                # 计算NMSE
+                if energy_batch.item() == 0:
+                    nmse_loss_value = 0.0 if mse_batch.item() == 0 else float('inf')
+                else:
+                    nmse_loss_value = mse_batch.item() / energy_batch.item()
 
-        plt.tight_layout(rect=[0, 0, 0.9, 1])
-        plt.savefig(os.path.join(val_dir, f"batch_{batch_idx}_comparison.png"), dpi=300, bbox_inches='tight')
+                # 计算SSIM
+                ssim_batch = ssim(fake, targets)
+                total_ssim += ssim_batch.item() * batch_size
+
+                # 计算PSNR
+                psnr_batch = psnr(fake, targets)
+                total_psnr += psnr_batch.item() * batch_size
+
+                # 记录批次指标
+                batch_nmse_losses.append(nmse_loss_value)
+                batch_ssim_losses.append(ssim_batch.item())
+                batch_psnr_losses.append(psnr_batch.item())
+                batch_indices.append(batch_idx)
+
+                # 保存一些示例图像
+                if batch_idx < 5:  # 只保存前5个批次的图像
+                    self._save_comparison_images(fake, targets, batch_idx, test_dir)
+
+                # 记录到TensorBoard
+                if self.writer is not None:
+                    self.writer.add_scalar('Test/NMSE_batch', nmse_loss_value, batch_idx)
+                    self.writer.add_scalar('Test/SSIM_batch', ssim_batch.item(), batch_idx)
+                    self.writer.add_scalar('Test/PSNR_batch', psnr_batch.item(), batch_idx)
+
+        # 计算平均指标
+        avg_mse = total_mse / total_samples if total_samples > 0 else 0
+        avg_rmse = math.sqrt(avg_mse)
+
+        if total_energy == 0:
+            avg_nmse = 0.0 if total_mse == 0 else float('inf')
+        else:
+            avg_nmse = total_mse / total_energy
+
+        avg_ssim = total_ssim / total_samples if total_samples > 0 else 0
+        avg_psnr = total_psnr / total_samples if total_samples > 0 else 0
+
+        # 记录平均指标到TensorBoard
+        if self.writer is not None:
+            self.writer.add_scalar('Test/NMSE', avg_nmse, 0)
+            self.writer.add_scalar('Test/RMSE', avg_rmse, 0)
+            self.writer.add_scalar('Test/SSIM', avg_ssim, 0)
+            self.writer.add_scalar('Test/PSNR', avg_psnr, 0)
+
+        # 绘制指标曲线
+        self._plot_test_metrics(batch_indices, batch_nmse_losses, batch_ssim_losses, batch_psnr_losses, test_dir)
+
+        # 打印结果
+        print(f"Test Results:")
+        print(f"NMSE: {avg_nmse:.6f}")
+        print(f"RMSE: {avg_rmse:.6f}")
+        print(f"SSIM: {avg_ssim:.6f}")
+        print(f"PSNR: {avg_psnr:.6f}")
+
+        # 保存结果到文件
+        with open(os.path.join(test_dir, "test_results.txt"), "w") as f:
+            f.write(f"NMSE: {avg_nmse:.6f}\n")
+            f.write(f"RMSE: {avg_rmse:.6f}\n")
+            f.write(f"SSIM: {avg_ssim:.6f}\n")
+            f.write(f"PSNR: {avg_psnr:.6f}\n")
+
+        return avg_nmse, avg_rmse, avg_ssim, avg_psnr
+
+    def _save_comparison_images(self, fake, targets, batch_idx, save_dir):
+        """保存比较图像"""
+        # 选择批次中的第一个样本
+        fake_img = fake[0].cpu().squeeze()
+        target_img = targets[0].cpu().squeeze()
+
+        # 创建比较图像
+        comparison = torch.stack([target_img, fake_img], dim=0)
+
+        # 保存图像
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.imshow(target_img, cmap='viridis')
+        plt.title('Target')
+        plt.axis('off')
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(fake_img, cmap='viridis')
+        plt.title('Generated')
+        plt.axis('off')
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, f"comparison_batch_{batch_idx}.png"))
         plt.close()
 
-    def save_best_checkpoint(self,model, optimizer, scheduler, epoch, current_loss, best_loss,
-                             save_dir, phase_name, delete_previous=True):
-        """
-        保存最优权重检查点，并可选择删除之前的最优权重
+        # 保存到TensorBoard
+        if self.writer is not None:
+            grid = torchvision.utils.make_grid(comparison.unsqueeze(1), nrow=2, normalize=True)
+            self.writer.add_image(f'Test/Comparison_batch_{batch_idx}', grid, 0)
 
-        Args:
-            model: 模型实例
-            optimizer: 优化器实例
-            scheduler: 学习率调度器实例
-            epoch: 当前epoch
-            current_loss: 当前验证损失
-            best_loss: 历史最佳损失
-            save_dir: 保存目录
-            phase_name: 阶段名称
-            delete_previous: 是否删除之前的最优权重文件
+    def _plot_test_metrics(self, batch_indices, nmse_losses, ssim_losses, psnr_losses, save_dir):
+        """绘制测试指标曲线"""
+        plt.figure(figsize=(15, 5))
 
-        Returns:
-            new_best_loss: 更新后的最佳损失值
-            is_best: 是否是最佳模型
-        """
-        is_best = current_loss < best_loss
-        new_best_loss = min(current_loss, best_loss)
+        plt.subplot(1, 3, 1)
+        plt.plot(batch_indices, nmse_losses, 'b-o')
+        plt.title('NMSE per Batch')
+        plt.xlabel('Batch Index')
+        plt.ylabel('NMSE')
+        plt.grid(True)
 
-        if is_best:
-            # 如果设置为删除之前的最优权重，先查找并删除
-            if delete_previous:
-                pattern = os.path.join(save_dir, f"best_checkpoint_{phase_name}_epoch_*.pth")
-                previous_best_files = glob.glob(pattern)
-                for file_path in previous_best_files:
-                    try:
-                        os.remove(file_path)
-                        print(f"Deleted previous best checkpoint: {os.path.basename(file_path)}")
-                    except OSError as e:
-                        print(f"Error deleting file {file_path}: {e}")
+        plt.subplot(1, 3, 2)
+        plt.plot(batch_indices, ssim_losses, 'r-o')
+        plt.title('SSIM per Batch')
+        plt.xlabel('Batch Index')
+        plt.ylabel('SSIM')
+        plt.grid(True)
 
-            # 创建检查点
-            checkpoint = {
-                'epoch': epoch + 1,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-                'best_loss': new_best_loss,
-                'val_loss': current_loss
-            }
+        plt.subplot(1, 3, 3)
+        plt.plot(batch_indices, psnr_losses, 'g-o')
+        plt.title('PSNR per Batch')
+        plt.xlabel('Batch Index')
+        plt.ylabel('PSNR (dB)')
+        plt.grid(True)
 
-            # 保存新的最优权重
-            checkpoint_path = os.path.join(save_dir, f"best_checkpoint_{phase_name}_epoch_{epoch + 1}.pth")
-            torch.save(checkpoint, checkpoint_path)
-            print(f"Saved new best checkpoint at epoch {epoch + 1} with loss: {current_loss:.6f}")
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, "test_metrics.png"))
+        plt.close()
 
-        return new_best_loss, is_best
+        # 保存到TensorBoard
+        if self.writer is not None:
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-    def load_best_checkpoint(self, model, WNetPhase):
-        """
-        加载指定阶段的最优权重检查点到模型中
+            axes[0].plot(batch_indices, nmse_losses, 'b-o')
+            axes[0].set_title('NMSE per Batch')
+            axes[0].set_xlabel('Batch Index')
+            axes[0].set_ylabel('NMSE')
+            axes[0].grid(True)
 
-        Args:
-            model: 要加载权重的模型实例
-            phase_name: 阶段名称（如"firstU"、"secondU"）
+            axes[1].plot(batch_indices, ssim_losses, 'r-o')
+            axes[1].set_title('SSIM per Batch')
+            axes[1].set_xlabel('Batch Index')
+            axes[1].set_ylabel('SSIM')
+            axes[1].grid(True)
 
-        Returns:
-            model: 加载了最优权重的模型
-            best_loss: 最佳损失值
-            epoch: 最佳权重对应的epoch
-        """
-        # 构建最优权重文件的搜索模式
-        pattern = os.path.join(self.model_save_dir, f"best_checkpoint_{WNetPhase}_epoch_*.pth")
-        best_checkpoint_files = glob.glob(pattern)
+            axes[2].plot(batch_indices, psnr_losses, 'g-o')
+            axes[2].set_title('PSNR per Batch')
+            axes[2].set_xlabel('Batch Index')
+            axes[2].set_ylabel('PSNR (dB)')
+            axes[2].grid(True)
 
-        if not best_checkpoint_files:
-            print(f"警告: 未找到{WNetPhase}阶段的最优权重文件")
-            return model, float('inf'), 0
-
-        # 按epoch排序，选择最新的最优权重文件
-        # 从文件名中提取epoch号并排序
-        def extract_epoch(filename):
-            match = re.search(r'epoch_(\d+)\.pth$', filename)
-            return int(match.group(1)) if match else 0
-
-        best_checkpoint_files.sort(key=extract_epoch, reverse=True)
-        latest_best_checkpoint = best_checkpoint_files[0]
-
-        # 加载检查点
-        try:
-            checkpoint = torch.load(latest_best_checkpoint, weights_only=True, map_location=self.device)
-            model.load_state_dict(checkpoint['model_state_dict'])
-
-            best_loss = checkpoint.get('best_loss', float('inf'))
-            epoch = checkpoint.get('epoch', 0)
-
-            print(f"成功加载{WNetPhase}阶段的最优权重 (epoch {epoch}, loss: {best_loss:.6f})")
-            return model, best_loss, epoch
-
-        except Exception as e:
-            print(f"加载最优权重时出错: {e}")
-            return model, float('inf'), 0
+            plt.tight_layout()
+            self.writer.add_figure('Test/Metrics', fig, 0)
+            plt.close()
 
 
 
