@@ -4,7 +4,7 @@ from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.sigle_Unet.Unet_BTM import Unet_BTM
 import os
-from data.radioSeerRead import create_dataloaders
+
 
 if __name__ == '__main__':
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')

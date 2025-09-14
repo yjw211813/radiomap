@@ -12,12 +12,11 @@ import torch.nn.functional as F
 
 class MS_SSIM_L1_LOSS(nn.Module):
     # Have to use cuda, otherwise the speed is too slow.
-    def __init__(self, gaussian_sigmas=[0.5, 1.0, 2.0, 4.0, 8.0],
+    def __init__(self,device, gaussian_sigmas=[0.5, 1.0, 2.0, 4.0, 8.0],
                  data_range = 1.0,
                  K=(0.01, 0.03),
                  alpha=0.025,
-                 compensation=200.0,
-                 cuda_dev=0,):
+                 compensation=200.0,):
         super(MS_SSIM_L1_LOSS, self).__init__()
         self.DR = data_range
         self.C1 = (K[0] * data_range) ** 2
@@ -32,7 +31,7 @@ class MS_SSIM_L1_LOSS(nn.Module):
             g_masks[3*idx+0, 0, :, :] = self._fspecial_gauss_2d(filter_size, sigma)
             g_masks[3*idx+1, 0, :, :] = self._fspecial_gauss_2d(filter_size, sigma)
             g_masks[3*idx+2, 0, :, :] = self._fspecial_gauss_2d(filter_size, sigma)
-        self.g_masks = g_masks.cuda(cuda_dev)
+        self.g_masks = g_masks.to(device)
 
     def _fspecial_gauss_1d(self, size, sigma):
         """Create 1-D gauss kernel
