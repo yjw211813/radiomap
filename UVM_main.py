@@ -11,7 +11,7 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     train_batch_size = 16  # 批次大小
     val_batch_size = 16
-    test_batch_size = 8  # 批次大小
+    test_batch_size = 16  # 批次大小
 
 
     simuSetDict = {
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     # 定义训练对象
     warmup_epochs = 4
     total_epoch = 80
-    start_epoch = 0
+    start_epoch = 2
 
     app = Unet_BTM_app(start_epoch, log_dir, warmup_epochs, model_save_dir, device)
     load_epoch = 0

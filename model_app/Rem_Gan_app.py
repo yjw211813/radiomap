@@ -430,9 +430,9 @@ class REM_GAN_app():
         with torch.no_grad():
             for batch_idx, (inputs, targets) in enumerate(tqdm(self.test_loader, desc="Testing", ncols=100, leave=False)):
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
-
+                inputs = inputs[:, :3, :, :]
                 # 生成器前向传播
-                fake = self.netG(inputs)
+                fake, _ = self.netG(inputs)
 
                 batch_size = inputs.size(0)
                 total_samples += batch_size

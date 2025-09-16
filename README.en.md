@@ -196,6 +196,13 @@ tmux source-file ~/.tmux.conf
 tmux attach -t 
 tmux attach -t
 
+tmux new -s session_name
+
+tmux ls
+
+    tmux attach -t session_name
+
+Ctrl + b 然后按 d
 
 tmux ls 查看当前会话窗口
 # 杀掉进程
