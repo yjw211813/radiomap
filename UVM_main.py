@@ -7,7 +7,7 @@ import os
 
 
 if __name__ == '__main__':
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
     train_batch_size = 16  # 批次大小
     val_batch_size = 16
@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     os.makedirs(model_save_dir, exist_ok=True)
 
-    print("UVM train")
+    print("UVM test")
     # 定义模型
 
     model = UNet(n_channels = 2)
@@ -67,15 +67,11 @@ if __name__ == '__main__':
     start_epoch = 2
 
     app = Unet_BTM_app(start_epoch, log_dir, warmup_epochs, model_save_dir, device)
-    load_epoch = 0
+    load_epoch = 16
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/UVM/"
-    app.train(model, train_loader, val_loader, total_epoch)
+    # app.train(model, train_loader, val_loader, total_epoch)
+
+    app.test(model, load_epoch, test_loader, val_dir)
 
 
 
-
-    # WNetPhase = "secondU"
-    # model = RadioWNet(inputs=2, phase=WNetPhase)
-    # load_epoch = 0
-    # val_dir = r"/home/code/radio_map_construction/runs/model_val_log/RadioUnet/"
-    # app.predict(model, load_epoch, test_loader, val_dir, WNetPhase="secondU", targetType="dense")
