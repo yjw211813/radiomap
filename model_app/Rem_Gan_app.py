@@ -160,9 +160,6 @@ class REM_GAN_app():
         image_one_hot_labelsF = one_hot_labelsF[:, :, None, None]
         image_one_hot_labelsR = one_hot_labelsR[:, :, None, None]
 
-        self.netD.zero_grad()
-        self.optimD.zero_grad()
-
         # 将标签扩展为与图像相同的空间尺寸
         image_one_hot_labelsF = image_one_hot_labelsF.repeat(1, 1, H, W)
         image_one_hot_labelsR = image_one_hot_labelsR.repeat(1, 1, H, W)

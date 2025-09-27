@@ -375,7 +375,4 @@ def multiScaleUpSample_test():
     print(f"Output shape: {output_tensor.shape}")
 
 if __name__ == "__main__":
-    Conv3x3_DownSample_test()
-    multiScaleConvDown_test()
-    dialMultiScaleConvDown_test()
-    PixelShuffle_test()
+    ConvTranspose_test()

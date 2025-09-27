@@ -4,7 +4,6 @@ from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.sigle_Unet.Unet_BTM import Unet_BTM
 import os
-from data.radioSeerRead import create_dataloaders
 
 if __name__ == '__main__':
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
@@ -12,14 +11,6 @@ if __name__ == '__main__':
     train_batch_size = 16  # 批次大小
     val_batch_size = 16
     test_batch_size = 8  # 批次大小1
-    # h5_path = r"/home/data/path_loss_data/RadioSeer/radiomap_data.h5"
-    # dataloaders = create_dataloaders(
-    #     h5_path=h5_path,
-    #     train_batch_size=train_batch_size,
-    #     val_batch_size=val_batch_size,
-    #     test_batch_size=test_batch_size,
-    #     num_workers=4
-    # )
     
     simuSetDict = {
         "ind1": 0,  # 起始索引
