@@ -15,7 +15,7 @@ import os
 import torch
 
 import numpy as np
-
+import math
 from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
 
@@ -31,6 +31,10 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from skimage.segmentation import slic
 import scipy.stats as stats
+import matplotlib.pyplot as plt
+from torchmetrics.functional import peak_signal_noise_ratio as psnr
+from torchmetrics.functional import structural_similarity_index_measure as ssim
+
 
 TV_WEIGHT = 1e-7
 
@@ -128,7 +132,7 @@ def ohe_vector_from_labels(labels, n_classes):
 
 
 class REM_GAN_app():
-    def __init__(self, netD, netG, model_app_dict, dataSetDict):
+    def __init__(self,  model_app_dict, dataSetDict):
         # 模型加载属性
         self.start_epoch = model_app_dict['start_epoch']
         self.device = model_app_dict['device']
@@ -144,8 +148,8 @@ class REM_GAN_app():
         os.makedirs(self.log_dir, exist_ok=True)
         self.writer = SummaryWriter(log_dir=self.log_dir)
 
-        self.netG = netG.to(self.device)  # ResnetGenerator(input_nc=2,output_nc=1,ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6).to(self.device)
-        self.netD = netD.to(self.device)  # Discriminator(self.device).to(self.device)
+        self.netG = model_app_dict["netG"].to(self.device)  # ResnetGenerator(input_nc=2,output_nc=1,ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6).to(self.device)
+        self.netD = model_app_dict["netD"].to(self.device)  # Discriminator(self.device).to(self.device)
 
         # 优化器属性
         self.optimG = optim.Adam(self.netG.parameters(), lr=model_app_dict['learning_rate'], betas=(0.9, 0.999))
@@ -405,6 +409,211 @@ class REM_GAN_app():
                 }
                 torch.save(checkpoint, os.path.join(self.save_dir, f"checkpoint_REMGAN_epoch_{epoch}.pth"))
                 print(f"Saved checkpoint at epoch {epoch}")
+    def test(self):
+        """Test method for REMGAN that loads the best weights and performs testing"""
+        print("Predicting on test set with best weights")
+
+        # 加载最佳检查点
+        best_checkpoint_path = os.path.join(self.load_dir, "checkpoint_REMGAN_best.pth")
+        if os.path.exists(best_checkpoint_path):
+            checkpoint = torch.load(best_checkpoint_path, map_location=self.device, weights_only=False)
+            self.netG.load_state_dict(checkpoint['netG_state_dict'])
+            self.netD.load_state_dict(checkpoint['netD_state_dict'])
+            print(
+                f"Loaded best model from epoch {checkpoint['epoch']} with validation loss: {checkpoint['best_loss']:.6f}")
+        else:
+            print("Warning: Best checkpoint not found. Using current model weights.")
+
+        # 设置模型为评估模式
+        self.netG.eval()
+        self.netD.eval()
+
+        # 初始化指标
+        total_samples = 0
+        total_mse = 0.0
+        total_energy = 0.0
+        total_ssim = 0.0
+        total_psnr = 0.0
+
+        # 创建保存目录
+        test_dir = os.path.join(self.test_dir, "test_results")
+        os.makedirs(test_dir, exist_ok=True)
+        # 用于绘制曲线的列表
+        batch_nmse_losses = []
+        batch_ssim_losses = []
+        batch_psnr_losses = []
+        batch_indices = []
+
+        with torch.no_grad():
+            for batch_idx, (inputs, targets) in enumerate(tqdm(self.test_loader, desc="Testing", ncols=100, leave=False)):
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                inputs = inputs[:, :3, :, :]
+                # 生成器前向传播
+                fake, _ = self.netG(inputs)
+
+                batch_size = inputs.size(0)
+                total_samples += batch_size
+
+                # 计算MSE
+                mse_batch = self.lossG(fake, targets)
+                total_mse += mse_batch.item() * batch_size
+
+                # 计算能量（目标的L2范数平方）
+                energy_batch = torch.sum(targets ** 2) / batch_size
+                total_energy += energy_batch.item() * batch_size
+
+                # 计算NMSE
+                if energy_batch.item() == 0:
+                    nmse_loss_value = 0.0 if mse_batch.item() == 0 else float('inf')
+                else:
+                    nmse_loss_value = mse_batch.item() / energy_batch.item()
+
+                # 计算SSIM
+                ssim_batch = ssim(fake, targets)
+                total_ssim += ssim_batch.item() * batch_size
+
+                # 计算PSNR
+                psnr_batch = psnr(fake, targets)
+                total_psnr += psnr_batch.item() * batch_size
+
+                # 记录批次指标
+                batch_nmse_losses.append(nmse_loss_value)
+                batch_ssim_losses.append(ssim_batch.item())
+                batch_psnr_losses.append(psnr_batch.item())
+                batch_indices.append(batch_idx)
+
+                # 保存一些示例图像
+                if batch_idx < 5:  # 只保存前5个批次的图像
+                    self._save_comparison_images(fake, targets, batch_idx, test_dir)
+
+                # 记录到TensorBoard
+                if self.writer is not None:
+                    self.writer.add_scalar('Test/NMSE_batch', nmse_loss_value, batch_idx)
+                    self.writer.add_scalar('Test/SSIM_batch', ssim_batch.item(), batch_idx)
+                    self.writer.add_scalar('Test/PSNR_batch', psnr_batch.item(), batch_idx)
+
+        # 计算平均指标
+        avg_mse = total_mse / total_samples if total_samples > 0 else 0
+        avg_rmse = math.sqrt(avg_mse)
+
+        if total_energy == 0:
+            avg_nmse = 0.0 if total_mse == 0 else float('inf')
+        else:
+            avg_nmse = total_mse / total_energy
+
+        avg_ssim = total_ssim / total_samples if total_samples > 0 else 0
+        avg_psnr = total_psnr / total_samples if total_samples > 0 else 0
+
+        # 记录平均指标到TensorBoard
+        if self.writer is not None:
+            self.writer.add_scalar('Test/NMSE', avg_nmse, 0)
+            self.writer.add_scalar('Test/RMSE', avg_rmse, 0)
+            self.writer.add_scalar('Test/SSIM', avg_ssim, 0)
+            self.writer.add_scalar('Test/PSNR', avg_psnr, 0)
+
+        # 绘制指标曲线
+        self._plot_test_metrics(batch_indices, batch_nmse_losses, batch_ssim_losses, batch_psnr_losses, test_dir)
+
+        # 打印结果
+        print(f"Test Results:")
+        print(f"NMSE: {avg_nmse:.6f}")
+        print(f"RMSE: {avg_rmse:.6f}")
+        print(f"SSIM: {avg_ssim:.6f}")
+        print(f"PSNR: {avg_psnr:.6f}")
+
+        # 保存结果到文件
+        with open(os.path.join(test_dir, "test_results.txt"), "w") as f:
+            f.write(f"NMSE: {avg_nmse:.6f}\n")
+            f.write(f"RMSE: {avg_rmse:.6f}\n")
+            f.write(f"SSIM: {avg_ssim:.6f}\n")
+            f.write(f"PSNR: {avg_psnr:.6f}\n")
+
+        return avg_nmse, avg_rmse, avg_ssim, avg_psnr
+
+    def _save_comparison_images(self, fake, targets, batch_idx, save_dir):
+        """保存比较图像"""
+        # 选择批次中的第一个样本
+        fake_img = fake[0].cpu().squeeze()
+        target_img = targets[0].cpu().squeeze()
+
+        # 创建比较图像
+        comparison = torch.stack([target_img, fake_img], dim=0)
+
+        # 保存图像
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.imshow(target_img, cmap='viridis')
+        plt.title('Target')
+        plt.axis('off')
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(fake_img, cmap='viridis')
+        plt.title('Generated')
+        plt.axis('off')
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, f"comparison_batch_{batch_idx}.png"))
+        plt.close()
+
+        # 保存到TensorBoard
+        if self.writer is not None:
+            grid = torchvision.utils.make_grid(comparison.unsqueeze(1), nrow=2, normalize=True)
+            self.writer.add_image(f'Test/Comparison_batch_{batch_idx}', grid, 0)
+
+    def _plot_test_metrics(self, batch_indices, nmse_losses, ssim_losses, psnr_losses, save_dir):
+        """绘制测试指标曲线"""
+        plt.figure(figsize=(15, 5))
+
+        plt.subplot(1, 3, 1)
+        plt.plot(batch_indices, nmse_losses, 'b-o')
+        plt.title('NMSE per Batch')
+        plt.xlabel('Batch Index')
+        plt.ylabel('NMSE')
+        plt.grid(True)
+
+        plt.subplot(1, 3, 2)
+        plt.plot(batch_indices, ssim_losses, 'r-o')
+        plt.title('SSIM per Batch')
+        plt.xlabel('Batch Index')
+        plt.ylabel('SSIM')
+        plt.grid(True)
+
+        plt.subplot(1, 3, 3)
+        plt.plot(batch_indices, psnr_losses, 'g-o')
+        plt.title('PSNR per Batch')
+        plt.xlabel('Batch Index')
+        plt.ylabel('PSNR (dB)')
+        plt.grid(True)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, "test_metrics.png"))
+        plt.close()
+
+        # 保存到TensorBoard
+        if self.writer is not None:
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+            axes[0].plot(batch_indices, nmse_losses, 'b-o')
+            axes[0].set_title('NMSE per Batch')
+            axes[0].set_xlabel('Batch Index')
+            axes[0].set_ylabel('NMSE')
+            axes[0].grid(True)
+
+            axes[1].plot(batch_indices, ssim_losses, 'r-o')
+            axes[1].set_title('SSIM per Batch')
+            axes[1].set_xlabel('Batch Index')
+            axes[1].set_ylabel('SSIM')
+            axes[1].grid(True)
+
+            axes[2].plot(batch_indices, psnr_losses, 'g-o')
+            axes[2].set_title('PSNR per Batch')
+            axes[2].set_xlabel('Batch Index')
+            axes[2].set_ylabel('PSNR (dB)')
+            axes[2].grid(True)
+
+            plt.tight_layout()
+            self.writer.add_figure('Test/Metrics', fig, 0)
+            plt.close()
 
 
 if __name__ == '__main__':
@@ -505,13 +714,13 @@ if __name__ == '__main__':
         'test_batch_size': test_batch_size
     }
     # 初始化REM_GAN应用
-    rem_gan_app = REM_GAN_app(netD, netG,model_app_dict, dataSetDict)
+    rem_gan_app = REM_GAN_app(model_app_dict, dataSetDict)
 
     # 训练模型
     print("开始训练REM-GAN模型...")
     rem_gan_app.train()
     # 测试模型
     print("开始测试REM-GAN模型...")
-    # rem_gan_app.test()
-    # print("REM-GAN 训练和测试完成")
+    rem_gan_app.test()
+    print("REM-GAN 训练和测试完成")
 
