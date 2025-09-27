@@ -17,7 +17,10 @@ import torch
 import numpy as np
 
 from torch.utils.data import Dataset, DataLoader
+import torch.optim as optim
 
+from torch.optim import lr_scheduler
+import torchvision
 import shutil
 from model.rem_gan import modules, loss
 import torch.nn.functional as F
@@ -124,39 +127,68 @@ def ohe_vector_from_labels(labels, n_classes):
     return F.one_hot(labels, num_classes=n_classes)
 
 
-class GANTrain():
-    def __init__(self, netD, netG, trainset, valset, testset, phase='first', batchsize=15, experiment_path=''):
-        self.cuda = torch.cuda.is_available()
-        self.device = torch.device('cuda:3' if self.cuda else 'cpu')
-        self.batch_sz = batchsize
+class REM_GAN_app():
+    def __init__(self, netD, netG, model_app_dict, dataSetDict):
+        # 模型加载属性
+        self.start_epoch = model_app_dict['start_epoch']
+        self.device = model_app_dict['device']
+        self.save_dir = model_app_dict['save_dir']
+        self.log_dir = model_app_dict['log_dir']
+        self.load_dir = model_app_dict['load_dir']
+        self.test_dir = model_app_dict['test_dir']
+        self.phase = model_app_dict['phase']
+        self.total_epoch = model_app_dict['total_epoch']
+        os.makedirs(self.save_dir, exist_ok=True)
+        if self.start_epoch == 0 and os.path.exists(self.log_dir):
+            shutil.rmtree(self.log_dir)                               # 清空 log_dir 下的文件（如果存在）
+        os.makedirs(self.log_dir, exist_ok=True)
+        self.writer = SummaryWriter(log_dir=self.log_dir)
+
+        self.netG = netG.to(self.device)  # ResnetGenerator(input_nc=2,output_nc=1,ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6).to(self.device)
+        self.netD = netD.to(self.device)  # Discriminator(self.device).to(self.device)
+
+        # 优化器属性
+        self.optimG = optim.Adam(self.netG.parameters(), lr=model_app_dict['learning_rate'], betas=(0.9, 0.999))
+        self.optimD = optim.Adam(self.netD.parameters(), lr=model_app_dict['learning_rate'], betas=(0.9, 0.999))
+        self.optimGscheduler = lr_scheduler.StepLR(self.optimG, step_size=model_app_dict['Gscheduler_step_size'], gamma=0.1)
+        self.optimDscheduler = lr_scheduler.StepLR(self.optimD, step_size=model_app_dict['Dscheduler_step_size'], gamma=0.1)
+
+
+
+        # 定义损失函数
+        self.lossD = nn.BCEWithLogitsLoss()  # 判别器损失
+        self.lossG = nn.MSELoss()  # 生成器的MSE损失
+        self.lossGS = nn.CosineSimilarity(dim=1, eps=1e-08)  # 余弦相似度损失
+        self.lossMsSSIM = loss.MS_SSIM_L1_LOSS(self.device)  # MS-SSIM + L1损失
+        self.lossL1 = nn.L1Loss()  # L1损失
+        self.slic_block_num = model_app_dict['slic_block_num']# 超像素分割的数量
         self.n_segments = 100
         self.c = 100
-        self.phase = phase
 
-        self.trainset = trainset
-        self.testset = testset
-        self.valset = valset
-        self.lossD = nn.BCEWithLogitsLoss()
-        self.lossG = nn.MSELoss()  # nn.L1Loss()#nn.MSELoss()
-        self.lossGS = nn.CosineSimilarity(dim=1, eps=1e-08)
-        self.lossMsSSIM = loss.MS_SSIM_L1_LOSS(self.device)
-        self.lossL1 = nn.L1Loss()
-        self.netG = netG.to(
-            self.device)  # ResnetGenerator(input_nc=2,output_nc=1,ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6).to(self.device)
-        self.netD = netD.to(self.device)  # Discriminator(self.device).to(self.device)
-        self.optimG = torch.optim.Adam(self.netG.parameters(), lr=0.001, betas=(0.9, 0.999))
-        self.optimD = torch.optim.Adam(self.netD.parameters(), lr=0.001, betas=(0.9, 0.999))
-        self.train_loader = torch.utils.data.DataLoader(self.trainset, batch_size=self.batch_sz, shuffle=False,
-                                                        num_workers=2)
-        self.test_loader = torch.utils.data.DataLoader(self.testset, batch_size=self.batch_sz, shuffle=False,
-                                                       num_workers=2)
-        self.val_loader = torch.utils.data.DataLoader(self.valset, batch_size=self.batch_sz, shuffle=False,
-                                                      num_workers=2)
-        self.experiment_path = experiment_path
+
+        # 数据集定义
+        self.train_batch_size  = model_app_dict['train_batch_size']
+        self.val_batch_size = model_app_dict['val_batch_size']
+        self.test_batch_size = model_app_dict['test_batch_size']
+        self.train_loader = DataLoader(dataSetDict['trainset'], batch_size=dataSetDict['train_batch_size'], shuffle=False, num_workers=2)
+        self.val_loader = DataLoader(dataSetDict['valset'], batch_size=dataSetDict['val_batch_size'], shuffle=False, num_workers=2)
+        self.test_loader = DataLoader(dataSetDict['testset'], batch_size=dataSetDict['test_batch_size'], shuffle=False, num_workers=2)
+
+        # 初始化训练记录
+        self.lossD_list = []
+        self.lossG_list = []
+        self.lossMSE_list = []
+        self.lossD_mean = []
+        self.lossG_mean = []
+        self.lossMSE_mean = []
+        self.val_loss_mean = []
+
+
+
 
     def _get_image_label(self,inputs):
-        one_hot_labelsF = ohe_vector_from_labels(torch.tensor([0] * self.batch_sz).to(self.device), 2)
-        one_hot_labelsR = ohe_vector_from_labels(torch.tensor([1] * self.batch_sz).to(self.device), 2)
+        one_hot_labelsF = ohe_vector_from_labels(torch.tensor([0] * self.train_batch_size).to(self.device), 2)
+        one_hot_labelsR = ohe_vector_from_labels(torch.tensor([1] * self.train_batch_size).to(self.device), 2)
 
         image_one_hot_labelsF = one_hot_labelsF[:, :, None, None]
         image_one_hot_labelsR = one_hot_labelsR[:, :, None, None]
@@ -186,7 +218,7 @@ class GANTrain():
         lossDT.backward(retain_graph=True)
         self.optimD.step()
 
-        self.lossDL += [lossDT.data.cpu().numpy() / inputs.shape[0]]
+        self.lossD_list += [lossDT.data.cpu().numpy() / inputs.shape[0]]
 
     def _train_generator(self, inputs, targets,up_sampled,image_one_hot_labelsR,number):
 
@@ -223,9 +255,9 @@ class GANTrain():
 
             lossTV = tvloss(fake)
             # I donot get the super pixels of fake only the x sparse
-            segmentsi = torch.zeros(self.batch_sz, self.c)
-            segmentf = torch.zeros(self.batch_sz, self.c)
-            for i in range(self.batch_sz):
+            segmentsi = torch.zeros(self.train_batch_size, self.c)
+            segmentf = torch.zeros(self.train_batch_size, self.c)
+            for i in range(self.train_batch_size):
                 inputs = inputs.detach().cpu()
                 si = slic(inputs[i, 2, :, :], n_segments=self.n_segments, sigma=5, channel_axis=None)
                 for n, j in enumerate(np.unique(si)):
@@ -241,13 +273,13 @@ class GANTrain():
 
         lossT.backward()
         self.optimG.step()
-        self.lossGL += [lossT.data.cpu().numpy() / inputs.shape[0]]
+        self.lossG_list += [lossT.data.cpu().numpy() / inputs.shape[0]]
 
         with torch.no_grad():
             loss = self.lossG(fake, targets)
-            self.lossMSE += [loss.data.cpu().numpy()]
+            self.lossMSE_list += [loss.data.cpu().numpy()]
             if number % 100 == 0:
-                print(' number: ', number, ' MSE: ', np.mean(self.lossMSE))
+                print(' number: ', number, ' MSE: ', np.mean(self.lossMSE_list))
 
     def validate(self):
         with torch.no_grad():
@@ -265,36 +297,42 @@ class GANTrain():
             val = np.mean(np.array(self.val_loss))
             return val
 
-    def train(self, epochs=10):
-        self.lossDL_m = []
-        self.lossGL_m = []
-        self.lossMSE_m = []
-        self.val_loss_m = []
-
-
+    def train(self):
 
         # 初始化最佳损失和模型索引
         save_interval = 1
         best_loss = 100
-        i = 0
+        # 如果从中间epoch开始，加载检查点
+        if self.start_epoch != 0:
+            checkpoint_path = os.path.join(self.load_dir, f"checkpoint_REMGAN_epoch_{self.start_epoch}.pth")
+            if os.path.exists(checkpoint_path):
+                checkpoint = torch.load(checkpoint_path, map_location=self.device)
+                self.netG.load_state_dict(checkpoint['netG_state_dict'])
+                self.netD.load_state_dict(checkpoint['netD_state_dict'])
+                self.optimG.load_state_dict(checkpoint['optimG_state_dict'])
+                self.optimD.load_state_dict(checkpoint['optimD_state_dict'])
+                self.optimGscheduler.load_state_dict(checkpoint['schedulerG_state_dict'])
+                self.optimDscheduler.load_state_dict(checkpoint['schedulerD_state_dict'])
+                best_loss = checkpoint.get('best_loss', best_loss)
+                print(f"Loaded REMGAN checkpoint from epoch {self.start_epoch}")
+            else:
+                print(f"Warning: Checkpoint {checkpoint_path} not found. Starting from scratch.")
+
+
         # Dense training
-        for epoch in range(epochs):
+        for epoch in range(self.start_epoch, self.total_epoch):
             train_progress = tqdm(
                 self.train_loader,
-                desc=f'Epoch {epoch + 1}/{epochs}',
+                desc=f'Epoch {epoch + 1}/{self.total_epoch}',
                 leave=True,
                 dynamic_ncols=True
             )
-            if epoch % 25 == 0:
-                for g in self.optimG.param_groups:
-                    g['lr'] = g['lr'] / 10
-                for d in self.optimD.param_groups:
-                    d['lr'] = d['lr'] / 10
-            print('learning rate gen:', g['lr'], ' learning rate dis:', d['lr'])
 
-            self.lossDL = []
-            self.lossGL = []
-            self.lossMSE = []
+            print(f'Epoch {epoch}: Generator LR = {self.optimG.param_groups[0]["lr"]}, 'f'Discriminator LR = {self.optimD.param_groups[0]["lr"]}')
+            # 清空每轮的损失列表
+            self.lossD_list = []
+            self.lossG_list = []
+            self.lossMSE_list = []
 
             for number, (inputs, targets) in enumerate(train_progress):
 
@@ -313,33 +351,68 @@ class GANTrain():
                 # Train Generator
                 self._train_generator(inputs, targets,up_sampled,image_one_hot_labelsR,number)
 
-            print("mean D loss: ", np.mean(np.array(self.lossDL)))
-            print("mean G loss: ", np.mean(np.array(self.lossGL)))
-            print("mean MSE loss: ", np.mean(np.array(self.lossMSE)))
-            self.lossDL_m += [np.mean(np.array(self.lossDL))]
-            self.lossGL_m += [np.mean(np.array(self.lossGL))]
-            self.lossMSE_m += [np.mean(np.array(self.lossMSE))]
+            # 计算 epoch 平均损失
+            avg_lossD = np.mean(self.lossD_list)
+            avg_lossG = np.mean(self.lossG_list)
+            avg_lossMSE = np.mean(self.lossMSE_list)
+            # 记录到TensorBoard
+            self.writer.add_scalar('Loss/Discriminator', avg_lossD, epoch)
+            self.writer.add_scalar('Loss/Generator', avg_lossG, epoch)
+            self.writer.add_scalar('Loss/MSE', avg_lossMSE, epoch)
 
+            print(f"Epoch {epoch} - Mean D loss: {avg_lossD:.6f}, Mean G loss: {avg_lossG:.6f}, Mean MSE: {avg_lossMSE:.6f}")
+            self.lossD_mean.append(avg_lossD)
+            self.lossG_mean.append(avg_lossG)
+            self.lossMSE_mean.append(avg_lossMSE)
 
-            val = self.validate()
-            self.val_loss_m += [val]
-            if val < best_loss:
-                best_loss = val
-                print("saving best model")
-                print("val MSE: ", val)
+            # 需要补一个调度器调节
+            self.optimGscheduler.step()
+            self.optimDscheduler.step()
 
-                G_file = os.path.join(self.experiment_path, f'Trained_ModelMSE_Gen_best_{i}.wgt')
-                D_file = os.path.join(self.experiment_path, f'Trained_ModelMSE_Dis_best_{i}.wgt')
-                torch.save(self.netG.state_dict(), G_file)
-                torch.save(self.netD.state_dict(), D_file)
-                i += 1
+            # 验证循环
+            val_loss = self.validate()
+            self.val_loss_mean.append(val_loss)
+            self.writer.add_scalar('Loss/Validation', val_loss, epoch)
+
+            # 保存最佳模型
+            if val_loss < best_loss:
+                best_loss = val_loss
+                print(f"Saving best model with validation MSE: {val_loss:.6f}")
+                # 同时保存检查点
+                checkpoint = {
+                    'epoch': epoch,
+                    'netG_state_dict': self.netG.state_dict(),
+                    'netD_state_dict': self.netD.state_dict(),
+                    'optimG_state_dict': self.optimG.state_dict(),
+                    'optimD_state_dict': self.optimD.state_dict(),
+                    'schedulerG_state_dict': self.optimGscheduler.state_dict(),
+                    'schedulerD_state_dict': self.optimDscheduler.state_dict(),
+                    'best_loss': best_loss
+                }
+                torch.save(checkpoint, os.path.join(self.save_dir, f"checkpoint_REMGAN_best.pth"))
+
+            # 定期保存检查点
+            if epoch % save_interval == 0:
+                checkpoint = {
+                    'epoch': epoch,
+                    'netG_state_dict': self.netG.state_dict(),
+                    'netD_state_dict': self.netD.state_dict(),
+                    'optimG_state_dict': self.optimG.state_dict(),
+                    'optimD_state_dict': self.optimD.state_dict(),
+                    'schedulerG_state_dict': self.optimGscheduler.state_dict(),
+                    'schedulerD_state_dict': self.optimDscheduler.state_dict(),
+                    'best_loss': best_loss
+                }
+                torch.save(checkpoint, os.path.join(self.save_dir, f"checkpoint_REMGAN_epoch_{epoch}.pth"))
+                print(f"Saved checkpoint at epoch {epoch}")
 
 
 if __name__ == '__main__':
     ########################
     # Load dataset         #
     ########################
-
+    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    torch.set_default_dtype(torch.float32)
     setup = 1  # REVISE index of setup
     setups = ['uniform', 'twoside', 'nonuniform']
     setup_name = setups[setup - 1]
@@ -390,21 +463,55 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
 
-    exp_index = 1  # REVISE index of experiment
-    exp_path = f"{setup_name}_{exp_index}"
+    # 设置保存目录
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/REM_GAN/'
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
+    test_dir = r"/home/code/radio_map_construction/runs/test_results/REM_GAN/"
 
-    # Ensure the directory exists before saving
-    os.makedirs(exp_path, exist_ok=True)
-
-    torch.set_default_dtype(torch.float32)
+    os.makedirs(model_save_dir, exist_ok=True)
+    os.makedirs(test_dir, exist_ok=True)
+    print("REM_GAN")
     netG = modules.RadioWNet(phase="firstU")
     netD = Discriminator()
+    # 配置模型应用字典
+    model_app_dict = {
+        'start_epoch': 0,
+        'device': device,
+        'save_dir': model_save_dir,
+        'log_dir': log_dir,
+        'load_dir': model_load_dir,
+        'test_dir': test_dir,
+        'phase': 'first',
+        'total_epoch': 400,
+        'netG': netG,
+        'netD': netD,
+        'learning_rate': 0.001,
+        'Gscheduler_step_size': 25,
+        'Dscheduler_step_size': 25,
+        'slic_block_num': 100,
+        'train_batch_size': train_batch_size,
+        'val_batch_size': val_batch_size,
+        'test_batch_size': test_batch_size
+    }
 
-    RadioGAN = GANTrain(netD, netG, Radio_train, Radio_val, Radio_test, phase='first', experiment_path=exp_path)
-    RadioGAN.train(epochs=300)
+    # 配置数据集字典
+    dataSetDict = {
+        'trainset': Radio_train,
+        'valset': Radio_val,
+        'testset': Radio_test,
+        'train_batch_size': train_batch_size,
+        'val_batch_size': val_batch_size,
+        'test_batch_size': test_batch_size
+    }
+    # 初始化REM_GAN应用
+    rem_gan_app = REM_GAN_app(netD, netG,model_app_dict, dataSetDict)
 
-    np.savetxt(os.path.join(exp_path, "MSE_train.csv"), RadioGAN.lossMSE_m, delimiter=",")
-    np.savetxt(os.path.join(exp_path, "MSE_val.csv"), RadioGAN.val_loss_m, delimiter=",")
+    # 训练模型
+    print("开始训练REM-GAN模型...")
+    rem_gan_app.train()
+    # 测试模型
+    print("开始测试REM-GAN模型...")
+    # rem_gan_app.test()
+    # print("REM-GAN 训练和测试完成")
 
-    # torch.save(bestD, os.path.join(exp_path, 'Trained_ModelMSE_D.pt'))
-    # torch.save(bestG, os.path.join(exp_path, 'Trained_ModelMSE_G.pt'))
