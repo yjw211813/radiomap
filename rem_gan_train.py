@@ -1,22 +1,19 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from torch.optim import lr_scheduler
-import os
-import shutil
-from model_app.Rem_Gan_app import REM_GAN_app
+from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
 from data.lib.seer_loader import RadioMapSeerLoader
-import torchvision
+from torch.utils.data import Dataset, DataLoader
+import os
 from model.rem_gan import modules
-from model.rem_gan.EncoderModels  import Discriminator
-
-
+from model_app.RemGANAPP import REM_GAN_app
 if __name__ == '__main__':
+    ########################
+    # Load dataset         #
+    ########################
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
-
+    setup = 1  # REVISE index of setup
+    setups = ['uniform', 'twoside', 'nonuniform']
+    setup_name = setups[setup - 1]
 
     simuSetDict = {
         "ind1": 0,  # 起始索引
@@ -32,16 +29,24 @@ if __name__ == '__main__':
         "missing": 1,  # 地图缺失号码
         "fix_samples": 0,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
         "num_samples_low": 655,  # 最低采样数
-        "num_samples_high": 655*10,  # 最高采样数
+        "num_samples_high": 655 * 10,  # 最高采样数
         "inter_flag": False,  # 看是否需要插值图像
         "scale256_flag": True,  # 取值范围是否为0 - 255
         "sample_flag": True,  # 是否有采样输入
         "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
         "formula_flag": True
     }
-    train_batch_size = 16  # 批次大小
-    val_batch_size = 16
-    test_batch_size = 16  # 批次大小1
+
+    if setup == 1:
+        simuSetDict["fix_samples"] = 655
+    elif setup == 2:
+        simuSetDict["fix_samples"] = 1
+    else:
+        simuSetDict["fix_samples"] = 0
+
+    train_batch_size = 30  # 批次大小
+    val_batch_size = 30
+    test_batch_size = 30  # 批次大小1
     # 加载数据集
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
     Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
@@ -65,11 +70,8 @@ if __name__ == '__main__':
     os.makedirs(model_save_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)
     print("REM_GAN")
-    # 设置实验参数
-    setup = 1
-    # 初始化模型
-    netG = modules.RadioWNet(phase="first")
-    netD = Discriminator(device)
+    netG = modules.RadioWNet(phase="firstU")
+    netD = Discriminator()
     # 配置模型应用字典
     model_app_dict = {
         'start_epoch': 0,
@@ -110,3 +112,4 @@ if __name__ == '__main__':
     print("开始测试REM-GAN模型...")
     rem_gan_app.test()
     print("REM-GAN 训练和测试完成")
+
