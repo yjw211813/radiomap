@@ -295,8 +295,11 @@ class RadioMapSeerLoader(Dataset):
         image_buildings = self._load_buildings_map(map_name)
         image_Tx = self._load_transmitter_map(source_name)
 
+        input_layers = [image_buildings, image_Tx]
         if self.sample_flag == True:
             input_samples = self.create_input_samples(image_gain)
+            input_layers.append(input_samples)
+
             if self.formula_flag == True:
 
                 xk, yk = np.where(input_samples != 0)
@@ -310,20 +313,14 @@ class RadioMapSeerLoader(Dataset):
                 theta, c = pop
                 genImg = c - 10 * theta * np.log10(np.sqrt(np.square(p - self.img_temp) + np.square(q - self.img_temp.T)) + 1e-30)
 
-
+                input_layers.append(genImg)
 
             if self.inter_flag == True:
-
                 interpolate_data = self.idw_interpolate_sample(input_samples, k=5)
                 interpolate_data =self.fusing_building(interpolate_data,image_buildings)
-
-                input_layers = [image_buildings, image_Tx, input_samples, genImg, interpolate_data]
-            else:
-                input_layers = [image_buildings, image_Tx, input_samples, genImg]
+                input_layers.append(interpolate_data)
 
 
-        else:
-            input_layers = [image_buildings, image_Tx]
         # 添加车辆通道（如果需要）
         if self.carsInput != "no":
             image_cars = self._load_cars_map(map_name)
