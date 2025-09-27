@@ -13,27 +13,20 @@ use loadersUNETCGAN_f woth fix_sample = 1
 from __future__ import print_function, division
 import os
 import torch
-import pandas as pd
-from skimage import io, transform
+
 import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image
+
 from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils, models, datasets
-from torchvision.utils import save_image
-from data.lib import REM_GAN_loaders
+
+import shutil
 from model.rem_gan import modules, loss
-import torch.optim as optim
-from torch.optim import lr_scheduler
-import time
-import copy
-from collections import defaultdict
 import torch.nn.functional as F
 import torch.nn as nn
 from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
+from data.lib.seer_loader import RadioMapSeerLoader
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 from skimage.segmentation import slic
-from skimage.segmentation import mark_boundaries
 import scipy.stats as stats
 
 TV_WEIGHT = 1e-7
@@ -132,13 +125,14 @@ def ohe_vector_from_labels(labels, n_classes):
 
 
 class GANTrain():
-    def __init__(self, netD, netG, trainset, valset=[], testset=[], phase='first', batchsize=15, experiment_path=''):
+    def __init__(self, netD, netG, trainset, valset, testset, phase='first', batchsize=15, experiment_path=''):
         self.cuda = torch.cuda.is_available()
-        self.device = torch.device('cuda:0' if self.cuda else 'cpu')
+        self.device = torch.device('cuda:3' if self.cuda else 'cpu')
         self.batch_sz = batchsize
         self.n_segments = 100
         self.c = 100
         self.phase = phase
+
         self.trainset = trainset
         self.testset = testset
         self.valset = valset
@@ -160,160 +154,165 @@ class GANTrain():
                                                       num_workers=2)
         self.experiment_path = experiment_path
 
-    def model_train(self, epochs=10):
-        self.lossDL = []
-        self.lossGL = []
-        self.lossMSE = []
+    def _get_image_label(self,inputs):
+        one_hot_labelsF = ohe_vector_from_labels(torch.tensor([0] * self.batch_sz).to(self.device), 2)
+        one_hot_labelsR = ohe_vector_from_labels(torch.tensor([1] * self.batch_sz).to(self.device), 2)
+
+        image_one_hot_labelsF = one_hot_labelsF[:, :, None, None]
+        image_one_hot_labelsR = one_hot_labelsR[:, :, None, None]
+
+        # 将标签扩展为与图像相同的空间尺寸
+        image_one_hot_labelsF = image_one_hot_labelsF.repeat(1, 1, inputs.shape[2], inputs.shape[3])
+        image_one_hot_labelsR = image_one_hot_labelsR.repeat(1, 1, inputs.shape[2], inputs.shape[3])
+
+        return image_one_hot_labelsF, image_one_hot_labelsR
+
+    def _train_discriminator(self, inputs, targets,image_one_hot_labelsF,image_one_hot_labelsR):
+
+        self.netD.zero_grad()
+        self.optimD.zero_grad()
+        [fake, _] = self.netG(inputs)
+        fake_image_and_labels = concat_vectors(fake, image_one_hot_labelsF)
+        real_image_and_labels = concat_vectors(targets, image_one_hot_labelsR)
+
+        predD_fake = self.netD(fake_image_and_labels.detach())
+        predD_real = self.netD(real_image_and_labels)
+
+        lossD_fake = self.lossD(predD_fake, torch.zeros_like(predD_fake))
+        lossD_real = self.lossD(predD_real, torch.ones_like(predD_real))
+
+        lossDT = (lossD_fake + lossD_real) / 2
+
+        lossDT.backward(retain_graph=True)
+        self.optimD.step()
+
+        self.lossDL += [lossDT.data.cpu().numpy() / inputs.shape[0]]
+
+    def _train_generator(self, inputs, targets,up_sampled,image_one_hot_labelsR,number):
+
+        self.netG.zero_grad()
+        self.optimG.zero_grad()
+
+        [fake, _] = self.netG(inputs)
+
+        fake_image_and_labels = concat_vectors(fake, image_one_hot_labelsR)
+        predD_fake = self.netD(fake_image_and_labels)
+
+        if self.phase == 'first':
+            lossG = self.lossD(predD_fake, torch.ones_like(predD_fake))
+            lossM = self.lossG(fake, targets)
+            g_fake = gradient_img(fake, self.device)
+            g_fake = torch.nan_to_num(g_fake)  # ,nan=0,posinf=100,neginf=100)
+            g_up_sampled = gradient_img(up_sampled, self.device)
+            g_up_sampled = torch.nan_to_num(g_up_sampled)  # ,nan=0,posinf=100,neginf=100)
+            lossGS = self.lossGS(g_up_sampled.double(), g_fake.double())
+            lossGS = self.lossGS(g_up_sampled, g_fake)
+            lossGS = 1 - torch.mean(lossGS)
+            lossTV = tvloss(fake)
+
+            lossT = 10 * lossG + 1 * lossM + 10 * lossTV + 10 * lossGS  # + lossTV
+
+        else:
+            lossG = self.lossD(predD_fake, torch.ones_like(predD_fake))
+            # print('lossG: ',lossG)
+            lossSSIM = self.lossMsSSIM(fake, targets)
+            lossL1 = self.lossG(fake, targets)
+
+            lossE = self.lossL1(power_loss(up_sampled.squeeze(1), self.device),
+                                power_loss(fake.squeeze(1), self.device))
+
+            lossTV = tvloss(fake)
+            # I donot get the super pixels of fake only the x sparse
+            segmentsi = torch.zeros(self.batch_sz, self.c)
+            segmentf = torch.zeros(self.batch_sz, self.c)
+            for i in range(self.batch_sz):
+                inputs = inputs.detach().cpu()
+                si = slic(inputs[i, 2, :, :], n_segments=self.n_segments, sigma=5, channel_axis=None)
+                for n, j in enumerate(np.unique(si)):
+                    x, y = np.where(si == j)
+                    xm, ym = np.unravel_index(np.argmax(inputs[i, 2, :, :][x, y], axis=None),
+                                              inputs[i, 2, :, :].shape)
+                    segmentsi[i][n] = inputs[i, 2, :, :][xm, ym]
+
+                    segmentf[i][n] = fake[i, 0, xm, ym]
+            lossC = self.lossL1(segmentsi.to(self.device), segmentf.to(self.device))
+
+            lossT = lossG + 100 * lossL1 + 0.001 * lossTV + 84 * lossSSIM + lossE + lossC  # + lossC #10*lossL1#+  lossE +  lossTV + lossC
+
+        lossT.backward()
+        self.optimG.step()
+        self.lossGL += [lossT.data.cpu().numpy() / inputs.shape[0]]
+
+        with torch.no_grad():
+            loss = self.lossG(fake, targets)
+            self.lossMSE += [loss.data.cpu().numpy()]
+            if number % 100 == 0:
+                print(' number: ', number, ' MSE: ', np.mean(self.lossMSE))
+
+    def validate(self):
+        with torch.no_grad():
+            self.netD.eval()
+            self.netG.eval()
+            self.val_loss = []
+            for inputs, targets in self.val_loader:
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                up_sampled = inputs[:, 3, :, :]
+                inputs = inputs[:, :3, :, :]
+                [fake, _] = self.netG(inputs)
+                v_loss = self.lossG(fake, targets)
+                self.val_loss += [v_loss.item()]
+
+            val = np.mean(np.array(self.val_loss))
+            return val
+
+    def train(self, epochs=10):
         self.lossDL_m = []
         self.lossGL_m = []
         self.lossMSE_m = []
         self.val_loss_m = []
-        best_model_wts_G = copy.deepcopy(self.netG.state_dict())
-        best_model_wts_D = copy.deepcopy(self.netD.state_dict())
+
+
+
+        # 初始化最佳损失和模型索引
+        save_interval = 1
         best_loss = 100
         i = 0
         # Dense training
-        for epoch in tqdm(range(epochs), unit='epochs'):
+        for epoch in range(epochs):
+            train_progress = tqdm(
+                self.train_loader,
+                desc=f'Epoch {epoch + 1}/{epochs}',
+                leave=True,
+                dynamic_ncols=True
+            )
             if epoch % 25 == 0:
                 for g in self.optimG.param_groups:
                     g['lr'] = g['lr'] / 10
                 for d in self.optimD.param_groups:
                     d['lr'] = d['lr'] / 10
             print('learning rate gen:', g['lr'], ' learning rate dis:', d['lr'])
-            for number, (inps, gts) in enumerate(self.train_loader):
-                inps, gts = inps.to(self.device), gts.to(self.device)
-                up_sampled = inps[:, 3, :, :].unsqueeze(1)
-                inps = inps[:, :3, :, :]
+
+            self.lossDL = []
+            self.lossGL = []
+            self.lossMSE = []
+
+            for number, (inputs, targets) in enumerate(train_progress):
+
+
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                up_sampled = inputs[:, 3, :, :].unsqueeze(1)
+                inputs = inputs[:, :3, :, :]
 
                 self.netG.train()
                 self.netD.train()
 
-                ############################
-                # Train the Discriminator  #
-                ############################
-                # 生成 batch_sz 长度的 独热码
-                one_hot_labelsF = ohe_vector_from_labels(torch.tensor([0] * self.batch_sz).to(self.device), 2)
-                one_hot_labelsR = ohe_vector_from_labels(torch.tensor([1] * self.batch_sz).to(self.device), 2)
-                #               print(one_hot_labelsF) # [1,2]
-                #               print(one_hot_labelsR)
-                #               print(one_hot_labelsR.shape)
+                image_one_hot_labelsF, image_one_hot_labelsR = self._get_image_label(inputs)
 
-                image_one_hot_labelsF = one_hot_labelsF[:, :, None, None]
-                image_one_hot_labelsR = one_hot_labelsR[:, :, None, None]
-                #               print(image_one_hot_labelsF.shape)
+                # Train the Discriminator
+                self._train_discriminator(inputs, targets,image_one_hot_labelsF,image_one_hot_labelsR)
+                # Train Generator
+                self._train_generator(inputs, targets,up_sampled,image_one_hot_labelsR,number)
 
-                self.netD.zero_grad()
-                self.optimD.zero_grad()
-
-                # 将标签扩展为与图像相同的空间尺寸
-                image_one_hot_labelsF = image_one_hot_labelsF.repeat(1, 1, inps.shape[2], inps.shape[3])
-                image_one_hot_labelsR = image_one_hot_labelsR.repeat(1, 1, inps.shape[2], inps.shape[3])
-                #                 print(image_one_hot_labelsF.shape)
-                # print()
-
-                [fake, _] = self.netG(inps)
-                fake_image_and_labels = concat_vectors(fake, image_one_hot_labelsF)
-                real_image_and_labels = concat_vectors(gts, image_one_hot_labelsR)
-                # print('fake shape:',fake_image_and_labels.shape)
-                #                 df
-
-                predD_fake = self.netD(fake_image_and_labels.detach())
-                predD_real = self.netD(real_image_and_labels)
-                # print(predD_fake.shape)
-                # print(predD_real.shape)
-                lossD_fake = self.lossD(predD_fake, torch.zeros_like(predD_fake))
-                lossD_real = self.lossD(predD_real, torch.ones_like(predD_real))
-
-                lossDT = (lossD_fake + lossD_real) / 2
-
-                lossDT.backward(retain_graph=True)
-                self.optimD.step()
-
-                self.lossDL += [lossDT.data.cpu().numpy() / inps.shape[0]]
-                # print("Discriminator loss: ",lossDT.item())
-
-                #####################
-                # Train Generator   #
-                #####################
-
-                self.netG.zero_grad()
-                self.optimG.zero_grad()
-
-                [fake, _] = self.netG(inps)
-
-                fake_image_and_labels = concat_vectors(fake, image_one_hot_labelsR)
-                predD_fake = self.netD(fake_image_and_labels)
-
-                # print('fake: ',torch.unique(torch.isnan(fake)))
-                # print('inps: ',torch.unique(torch.isnan(inps)))
-
-                if self.phase == 'first':
-                    lossG = self.lossD(predD_fake, torch.ones_like(predD_fake))
-                    lossM = self.lossG(fake, gts)
-                    g_fake = gradient_img(fake, self.device)
-                    g_fake = torch.nan_to_num(g_fake)  # ,nan=0,posinf=100,neginf=100)
-                    g_up_sampled = gradient_img(up_sampled, self.device)
-                    g_up_sampled = torch.nan_to_num(g_up_sampled)  # ,nan=0,posinf=100,neginf=100)
-                    lossGS = self.lossGS(g_up_sampled.double(), g_fake.double())
-                    lossGS = self.lossGS(g_up_sampled, g_fake)
-                    lossGS = 1 - torch.mean(lossGS)
-                    lossTV = tvloss(fake)
-                    # print('Lg: ',lossG)
-                    # print('lm: ',lossM)
-                    # print('lGS: ',lossGS)
-                    # print('ltv: ',lossTV)
-
-                    lossT = 10 * lossG + 1 * lossM + 10 * lossTV + 10 * lossGS  # + lossTV
-
-                else:
-                    lossG = self.lossD(predD_fake, torch.ones_like(predD_fake))
-                    # print('lossG: ',lossG)
-                    lossSSIM = self.lossMsSSIM(fake, gts)
-                    lossL1 = self.lossG(fake, gts)
-                    # print(lossL1)
-                    # print('lossSSIM: ',lossSSIM)
-                    # check the following
-                    # print(power_loss(inps[:,-1,:,:], self.device).shape,power_loss(fake, self.device).shape)
-                    lossE = self.lossL1(power_loss(up_sampled.squeeze(1), self.device),
-                                        power_loss(fake.squeeze(1), self.device))
-                    # print('lossE: ',lossE)
-                    lossTV = tvloss(fake)
-                    ##print('lossTV: ',lossTV)
-                    # I donot get the super pixels of fake only the x sparse
-                    segmentsi = torch.zeros(self.batch_sz, self.c)
-                    segmentf = torch.zeros(self.batch_sz, self.c)
-                    for i in range(self.batch_sz):
-                        inps = inps.detach().cpu()
-                        si = slic(inps[i, 2, :, :], n_segments=self.n_segments, sigma=5, channel_axis=None)
-                        for n, j in enumerate(np.unique(si)):
-                            x, y = np.where(si == j)
-                            xm, ym = np.unravel_index(np.argmax(inps[i, 2, :, :][x, y], axis=None),
-                                                      inps[i, 2, :, :].shape)
-                            segmentsi[i][n] = inps[i, 2, :, :][xm, ym]
-                            # print('shape: ',inps[i,2,:,:][xm,ym].shape,fake[i,0,xm,ym].shape,fake[i].shape)
-                            segmentf[i][n] = fake[i, 0, xm, ym]
-                    lossC = self.lossL1(segmentsi.to(self.device), segmentf.to(self.device))
-                    # print('lossC: ',lossC)
-                    # sf = slic(fake[i], n_segments = self.n_segments, sigma = 5)
-
-                    lossT = lossG + 100 * lossL1 + 0.001 * lossTV + 84 * lossSSIM + lossE + lossC  # + lossC #10*lossL1#+  lossE +  lossTV + lossC
-                    # with torch.no_grad():
-                    # print("MSE: ", lossL1)
-
-                lossT.backward()
-
-                self.optimG.step()
-
-                self.lossGL += [lossT.data.cpu().numpy() / inps.shape[0]]
-                with torch.no_grad():
-                    loss = self.lossG(fake, gts)
-                    self.lossMSE += [loss.data.cpu().numpy()]
-                    if number % 100 == 0:
-                        print("epoch: ", epoch, ' number: ', number, ' MSE: ', np.mean(self.lossMSE))
-                # print("Generator loss: ",lossG.item())
-            #     break
-            # break
-            # print(lossT)
             print("mean D loss: ", np.mean(np.array(self.lossDL)))
             print("mean G loss: ", np.mean(np.array(self.lossGL)))
             print("mean MSE loss: ", np.mean(np.array(self.lossMSE)))
@@ -321,96 +320,91 @@ class GANTrain():
             self.lossGL_m += [np.mean(np.array(self.lossGL))]
             self.lossMSE_m += [np.mean(np.array(self.lossMSE))]
 
-            with torch.no_grad():
-                self.netD.eval()
-                self.netG.eval()
-                self.val_loss = []
-                for inps, gts in self.val_loader:
-                    inps, gts = inps.to(self.device), gts.to(self.device)
-                    up_sampled = inps[:, 3, :, :]
-                    inps = inps[:, :3, :, :]
-                    [fake, _] = self.netG(inps)
-                    v_loss = self.lossG(fake, gts)
-                    self.val_loss += [v_loss.item()]
-                val = np.mean(np.array(self.val_loss))
-                self.val_loss_m += [val]
-                if val < best_loss:
-                    best_loss = val
-                    print("saving best model")
-                    print("val MSE: ", val)
-                    best_model_wts_D = copy.deepcopy(self.netD.state_dict())
-                    best_model_wts_G = copy.deepcopy(self.netG.state_dict())
-                    G_file = os.path.join(self.experiment_path, f'Trained_ModelMSE_Gen_best_{i}.wgt')
-                    D_file = os.path.join(self.experiment_path, f'Trained_ModelMSE_Dis_best_{i}.wgt')
-                    torch.save(self.netG.state_dict(), G_file)
-                    torch.save(self.netD.state_dict(), D_file)
-                    i += 1
-        return best_model_wts_D, best_model_wts_G
 
-        # torch.save(model.state_dict(), 'RadioWNet_c_DPM_Thr2/Trained_Model_FirstU.pt')
+            val = self.validate()
+            self.val_loss_m += [val]
+            if val < best_loss:
+                best_loss = val
+                print("saving best model")
+                print("val MSE: ", val)
+
+                G_file = os.path.join(self.experiment_path, f'Trained_ModelMSE_Gen_best_{i}.wgt')
+                D_file = os.path.join(self.experiment_path, f'Trained_ModelMSE_Dis_best_{i}.wgt')
+                torch.save(self.netG.state_dict(), G_file)
+                torch.save(self.netD.state_dict(), D_file)
+                i += 1
 
 
-########################
-# Load dataset         #
-########################
+if __name__ == '__main__':
+    ########################
+    # Load dataset         #
+    ########################
 
-# Setup 1 - uniform 1%
-# Setup 2 - twoside 1% and 10%
-# Setup 3 - nonuniform 1% to 10%
+    setup = 1  # REVISE index of setup
+    setups = ['uniform', 'twoside', 'nonuniform']
+    setup_name = setups[setup - 1]
 
-setup = 1  # REVISE index of setup
-setups = ['uniform', 'twoside', 'nonuniform']
-setup_name = setups[setup - 1]
+    simuSetDict = {
+        "ind1": 0,  # 起始索引
+        "ind2": 0,  # 末尾索引
+        "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
+        "numTx": 80,  # 信源数量设定
+        "thresh": 0.2,  # 环境噪声
+        "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
+        "carsSimul": "no",  # 是否开启小车作为仿真
+        "carsInput": "no",  # 是否将小车图作为模型输入
+        "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
+        "cityMap": "complete",  # 是否输入完全的城市地图
+        "missing": 1,  # 地图缺失号码
+        "fix_samples": 0,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+        "num_samples_low": 655,  # 最低采样数
+        "num_samples_high": 655 * 10,  # 最高采样数
+        "inter_flag": False,  # 看是否需要插值图像
+        "scale256_flag": True,  # 取值范围是否为0 - 255
+        "sample_flag": True,  # 是否有采样输入
+        "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
+        "formula_flag": True
+    }
 
-if setup == 1:
-    Radio_train = REM_GAN_loaders.RadioUNet_s(phase="train", fix_samples=655, num_samples_low=10, num_samples_high=300)
-    Radio_val = REM_GAN_loaders.RadioUNet_s(phase="val", fix_samples=655, num_samples_low=10, num_samples_high=300)
-    Radio_test = REM_GAN_loaders.RadioUNet_s(phase="test", fix_samples=655, num_samples_low=10, num_samples_high=300)
+    if setup == 1:
+        simuSetDict["fix_samples"] = 655
+    elif setup == 2:
+        simuSetDict["fix_samples"] = 1
+    else:
+        simuSetDict["fix_samples"] = 0
 
-elif setup == 2:
-    Radio_train = REM_GAN_loaders.RadioUNet_s(phase="train", fix_samples=1, num_samples_low=655, num_samples_high=655 * 10)
-    Radio_val = REM_GAN_loaders.RadioUNet_s(phase="val", fix_samples=1, num_samples_low=655, num_samples_high=655 * 10)
-    Radio_test = REM_GAN_loaders.RadioUNet_s(phase="test", fix_samples=1, num_samples_low=655, num_samples_high=655 * 10)
+    train_batch_size = 30  # 批次大小
+    val_batch_size = 30
+    test_batch_size = 30  # 批次大小1
+    # 加载数据集
+    Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
+    Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
+    Radio_test = RadioMapSeerLoader(simuSetDict, phase="test")
 
-else:
-    Radio_train = REM_GAN_loaders.RadioUNet_s(phase="train", fix_samples=0, num_samples_low=655, num_samples_high=655 * 10)
-    Radio_val = REM_GAN_loaders.RadioUNet_s(phase="val", fix_samples=0, num_samples_low=655, num_samples_high=655 * 10)
-    Radio_test = REM_GAN_loaders.RadioUNet_s(phase="test", fix_samples=0, num_samples_low=655, num_samples_high=655 * 10)
+    dataloaders = {
+        'train': DataLoader(Radio_train, batch_size=train_batch_size, shuffle=True, num_workers=4),
+        'val': DataLoader(Radio_val, batch_size=val_batch_size, shuffle=True, num_workers=4),
+        'test': DataLoader(Radio_test, batch_size=test_batch_size, shuffle=True, num_workers=4)
+    }
+    train_loader = dataloaders['train']
+    val_loader = dataloaders['val']
+    test_loader = dataloaders['test']
 
-image_datasets = {
-    'train': Radio_train, 'val': Radio_val
-}
+    exp_index = 1  # REVISE index of experiment
+    exp_path = f"{setup_name}_{exp_index}"
 
-batch_size = 30
+    # Ensure the directory exists before saving
+    os.makedirs(exp_path, exist_ok=True)
 
-dataloaders = {
-    'train': DataLoader(Radio_train, batch_size=batch_size, shuffle=True, num_workers=1),
-    'val': DataLoader(Radio_val, batch_size=batch_size, shuffle=True, num_workers=1)
-}
+    torch.set_default_dtype(torch.float32)
+    netG = modules.RadioWNet(phase="firstU")
+    netD = Discriminator()
 
-device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
-print(device)
+    RadioGAN = GANTrain(netD, netG, Radio_train, Radio_val, Radio_test, phase='first', experiment_path=exp_path)
+    RadioGAN.train(epochs=300)
 
-exp_index = 1  # REVISE index of experiment
-exp_path = f"{setup_name}_{exp_index}"
+    np.savetxt(os.path.join(exp_path, "MSE_train.csv"), RadioGAN.lossMSE_m, delimiter=",")
+    np.savetxt(os.path.join(exp_path, "MSE_val.csv"), RadioGAN.val_loss_m, delimiter=",")
 
-# Ensure the directory exists before saving
-os.makedirs(exp_path, exist_ok=True)
-
-torch.set_default_dtype(torch.float32)
-torch.set_default_tensor_type('torch.cuda.FloatTensor')
-torch.backends.cudnn.enabled
-# netG = ResnetGenerator(input_nc=2,output_nc=1,ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6)
-netG = modules.RadioWNet(phase="firstU")  # .to(device)
-# netG.load_state_dict(torch.load('UNetCGANDEBUG/Trained_ModelMSE_G2.pt'))
-netD = Discriminator(device)
-# netD.load_state_dict(torch.load('UNetCGANDEBUG/Trained_ModelMSE_D2.pt'))
-
-RadioGAN = GANTrain(netD, netG, Radio_train, Radio_val, Radio_test, phase='first', experiment_path=exp_path)
-bestD, bestG = RadioGAN.model_train(epochs=300)
-
-np.savetxt(os.path.join(exp_path, "MSE_train.csv"), RadioGAN.lossMSE_m, delimiter=",")
-np.savetxt(os.path.join(exp_path, "MSE_val.csv"), RadioGAN.val_loss_m, delimiter=",")
-
-torch.save(bestD, os.path.join(exp_path, 'Trained_ModelMSE_D.pt'))
-torch.save(bestG, os.path.join(exp_path, 'Trained_ModelMSE_G.pt'))
+    # torch.save(bestD, os.path.join(exp_path, 'Trained_ModelMSE_D.pt'))
+    # torch.save(bestG, os.path.join(exp_path, 'Trained_ModelMSE_G.pt'))

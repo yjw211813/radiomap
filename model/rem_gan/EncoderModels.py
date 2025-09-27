@@ -50,12 +50,11 @@ class ResnetBlock(nn.Module):
 
 
 class ResnetGenerator(nn.Module):
-    def __init__(self, input_nc,output_nc,ngf = 64,norm_layer = nn.BatchNorm2d,use_dropout=False,n_blocks=3,gpu_id='cuda:0',padding_type='zeros'):#'reflect'
+    def __init__(self, input_nc,output_nc,ngf = 64,norm_layer = nn.BatchNorm2d,use_dropout=False,n_blocks=3,padding_type='zeros'):#'reflect'
         super(ResnetGenerator,self).__init__()
         self.input_nc = input_nc
         self.output_nc = output_nc
         self.ngf = ngf
-        self.gpu_ids = gpu_id
         if type(norm_layer) == functools.partial:
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
@@ -117,9 +116,9 @@ class ResnetGenerator(nn.Module):
         return y
     
 class Discriminator(nn.Module):
-    def __init__(self, ngpu,nc = 3, ndf = 64):
+    def __init__(self,nc = 3, ndf = 64):
         super(Discriminator, self).__init__()
-        self.ngpu = ngpu
+
         self.main = nn.Sequential(
             # input is (nc) x 64 x 64
             nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
