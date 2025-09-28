@@ -341,8 +341,8 @@ class REM_GAN_app():
 
 
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
-                up_sampled = inputs[:, 3, :, :].unsqueeze(1)
-                inputs = inputs[:, :3, :, :]
+                up_sampled = inputs[:, -3, :, :].unsqueeze(1)
+
 
                 self.netG.train()
                 self.netD.train()

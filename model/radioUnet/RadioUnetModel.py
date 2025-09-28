@@ -25,7 +25,7 @@ def convreluT(in_channels, out_channels, kernel, padding):
     
 class RadioWNet(nn.Module):
 
-    def __init__(self,inputs=2,phase="firstU"):
+    def __init__(self,inputs,phase="firstU"):
         super().__init__()
         
         self.inputs=inputs

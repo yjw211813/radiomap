@@ -63,10 +63,10 @@ if __name__ == '__main__':
     # 定义训练对象
     warmup_epochs = 4
     total_epoch = 80
-    start_epoch = 0
+    start_epoch = 1
 
     app = Unet_BTM_app(start_epoch, log_dir, warmup_epochs, model_save_dir, device)
-    load_epoch = 16
+    load_epoch = 1
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/UVM/"
     app.train(model, train_loader, val_loader, total_epoch)
 

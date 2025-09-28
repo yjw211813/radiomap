@@ -9,27 +9,28 @@ if __name__ == '__main__':
     train_batch_size = 16  # 批次大小
     val_batch_size = 16
     test_batch_size = 16  # 批次大小
-
     simuSetDict = {
         "ind1": 0,  # 起始索引
         "ind2": 0,  # 末尾索引
         "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
         "numTx": 80,  # 信源数量设定
-        "thresh": 0.2,  # 环境噪声
+        "thresh": 0.05,  # 环境噪声
         "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
-        "carsSimul": "no",  # 是否开启小车作为仿真
-        "carsInput": "no",  # 是否将小车图作为模型输入
+        "carsSimul": "yes",  # 是否开启小车作为仿真
+        "carsInput": "yes",  # 是否将小车图作为模型输入
         "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
         "cityMap": "complete",  # 是否输入完全的城市地图
         "missing": 1,  # 地图缺失号码
         "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
         "num_samples_low": 10,  # 最低采样数
         "num_samples_high": 300,  # 最高采样数
-        "inter_flag": False,  # 看是否需要插值图像
-        "sample_flag": False,
-        "scale256_flag": False,  # 取值范围是否为0 - 255
-        "loss_samples_flag":False,# 是否定义loss为稀疏采样loss
+        "inter_flag": True,  # 看是否需要插值图像
+        "scale256_flag": True,  # 取值范围是否为0 - 255
+        "sample_flag": True,  # 是否有采样输入
+        "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
+        "formula_flag": True
     }
+
     # 加载数据集
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
     Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
@@ -54,7 +55,7 @@ if __name__ == '__main__':
 
     # 定义训练对象
     step_size = 30
-    total_epoch = 50
+    total_epoch = 120
     start_epoch = 0
     app = RadioWNet_app(start_epoch, log_dir, step_size, model_save_dir, device)
 
@@ -62,11 +63,11 @@ if __name__ == '__main__':
     print("RadioUnet")
     # 定义模型
     WNetPhase = "firstU"
-    model = RadioWNet(inputs=2,phase=WNetPhase)
+    model = RadioWNet(inputs=6,phase=WNetPhase)
     app.train(model, train_loader, val_loader, total_epoch,WNetPhase = "firstU")
 
     WNetPhase = "secondU"
-    model = RadioWNet(inputs=2,phase=WNetPhase)
+    model = RadioWNet(inputs=6,phase=WNetPhase)
     # 加载第一层最佳权重
     model, best_loss, epoch = app.load_best_checkpoint(model = model,WNetPhase = "firstU")
     print("best_loss = ",best_loss)
