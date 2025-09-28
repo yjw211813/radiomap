@@ -3,9 +3,9 @@
 from model.UVM.unet_part import *
 
 from model.sub_block.statistic_tools import gpu_statistic
-class UNet(nn.Module):
+class UVMNet(nn.Module):
     def __init__(self, n_channels, bilinear=True):
-        super(UNet, self).__init__()
+        super(UVMNet, self).__init__()
         self.n_channels = n_channels
         self.bilinear = bilinear
 
@@ -40,7 +40,7 @@ def test_UNet():
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
     get_gpu_info = gpu_statistic(device)
     c, w, h = 2, 256,256
-    model =UNet(n_channels=2)  # 先在CPU创建
+    model =UVMNet(n_channels=2)  # 先在CPU创建
     x = torch.randn(16, c, w, h, requires_grad=True)
 
     get_gpu_info.print_gpu_memory("UVMB GPU info", x, model)

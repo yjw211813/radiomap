@@ -2,7 +2,7 @@ import torch
 from model_app.Unet_BTM_app import Unet_BTM_app
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
-from model.UVM.UVM_model import UNet
+from model.UVM.UVM_model import UVMNet
 import os
 
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     print("UVM train")
     # 定义模型
 
-    model = UNet(n_channels = 6)
+    model = UVMNet(n_channels = 6)
 
     # 定义训练对象
     warmup_epochs = 4

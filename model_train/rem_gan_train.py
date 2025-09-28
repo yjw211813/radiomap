@@ -12,8 +12,6 @@ if __name__ == '__main__':
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
     setup = 1  # REVISE index of setup
-    setups = ['uniform', 'twoside', 'nonuniform']
-    setup_name = setups[setup - 1]
 
     simuSetDict = {
         "ind1": 0,  # 起始索引
