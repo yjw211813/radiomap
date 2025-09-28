@@ -25,7 +25,7 @@ if __name__ == '__main__':
         "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
         "cityMap": "complete",  # 是否输入完全的城市地图
         "missing": 1,  # 地图缺失号码
-        "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+        "fix_samples": 655,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
         "num_samples_low": 10,  # 最低采样数
         "num_samples_high": 300,  # 最高采样数
         "inter_flag": True,  # 看是否需要插值图像
@@ -34,6 +34,7 @@ if __name__ == '__main__':
         "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
         "formula_flag": True
     }
+
 
 
 

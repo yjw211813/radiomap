@@ -14,168 +14,258 @@ from torchmetrics.functional import structural_similarity_index_measure as ssim
 import torchvision
 from model.rem_gan import modules
 from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
+import numpy as np
+import pandas as pd
 
 
 
 
-
-def create_horizontal_comparison( outputs, targets, batch_idx, val_dir):
-    # 确保输入是numpy数组且形状正确
-    if torch.is_tensor(outputs):
-        outputs = outputs.cpu().numpy()
+def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
+    """
+    创建多个模型的对比图像
+    """
+    # 转换为numpy数组
     if torch.is_tensor(targets):
         targets = targets.cpu().numpy()
 
-    # 移除通道维度 (batch_size, 1, H, W) -> (batch_size, H, W)
-    outputs = outputs.squeeze(1)
+    # 移除通道维度
     targets = targets.squeeze(1)
 
-    num_batches = outputs.shape[0]
+    num_batches = targets.shape[0]
+    num_models = len(outputs_dict) + 1  # +1 for targets
 
-    # 创建一个大图像，包含所有批次的对比
-    fig, axes = plt.subplots(2, num_batches, figsize=(5 * num_batches, 10))
+    # 创建一个大图像，包含所有模型和目标的对比
+    fig, axes = plt.subplots(num_batches, num_models, figsize=(4 * num_models, 4 * num_batches))
 
     # 处理只有1个批次的情况
     if num_batches == 1:
-        axes = axes.reshape(2, 1)
+        axes = axes.reshape(1, num_models)
+
+    model_names = ['Target'] + list(outputs_dict.keys())
 
     for i in range(num_batches):
-        # 获取当前批次的target和output
-        target_img = targets[i]
-        output_img = outputs[i]
-
         # 显示target
-        ax = axes[0, i]
-        im = ax.imshow(target_img, cmap='jet')
-        ax.set_title(f"Target (Sample {i})")
+        ax = axes[i, 0] if num_batches > 1 else axes[0]
+        im = ax.imshow(targets[i], cmap='jet')
+        ax.set_title(f"Target")
         ax.axis('off')
 
-        # 显示output
-        ax = axes[1, i]
-        im = ax.imshow(output_img, cmap='jet')
-        ax.set_title(f"Output (Sample {i})")
-        ax.axis('off')
+        # 显示各个模型的输出
+        for j, (model_name, outputs) in enumerate(outputs_dict.items()):
+            output_img = outputs[i]
+            if torch.is_tensor(output_img):
+                output_img = output_img.cpu().numpy()
+            output_img = output_img.squeeze()
 
-    # 添加一个共享的颜色条
-    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-    fig.colorbar(im, cax=cbar_ax)
+            ax = axes[i, j + 1] if num_batches > 1 else axes[j + 1]
+            im = ax.imshow(output_img, cmap='jet')
+            ax.set_title(f"{model_name}")
+            ax.axis('off')
 
-    plt.tight_layout(rect=[0, 0, 0.9, 1])
-    plt.savefig(os.path.join(val_dir, f"batch_{batch_idx}_comparison.png"), dpi=300, bbox_inches='tight')
+    plt.tight_layout()
+    plt.savefig(os.path.join(compare_dir, f"batch_{batch_idx}_model_comparison.png"), dpi=300, bbox_inches='tight')
     plt.close()
 
 
-def model_compare(radioUnet_model,UVM_model,REMGAN_netG,compare_dir,test_loader,device):
-# 多个模型拼在一块的对比图
+def model_compare(radioUnet_model, UVM_model, REMGAN_netG, compare_dir, test_loader, device):
+    """
+    多个模型的对比分析
+    """
     criterion = nn.MSELoss()
-    total_samples = 0
-    total_mse = 0.0
-    total_energy = 0.0
-    total_ssim = 0.0
-    total_psnr = 0.0
 
+    # 为每个模型初始化指标存储
+    models = {
+        'RadioUnet': radioUnet_model,
+        'UVM': UVM_model,
+        'REMGAN': REMGAN_netG
+    }
+
+    # 存储每个模型的指标
+    metrics = {}
+    for model_name in models.keys():
+        metrics[model_name] = {
+            'total_mse': 0.0,
+            'total_energy': 0.0,
+            'total_ssim': 0.0,
+            'total_psnr': 0.0,
+            'batch_nmse': [],
+            'batch_ssim': [],
+            'batch_psnr': [],
+            'batch_indices': []
+        }
+
+    total_samples = 0
     os.makedirs(compare_dir, exist_ok=True)
 
-    batch_nmse_losses = []
-    batch_ssim_losses = []
-    batch_psnr_losses = []
-    batch_indices = []
-
     with torch.no_grad():
-        for batch_idx, data in enumerate(tqdm(test_loader, desc="Testing", ncols=100, leave=False)):
-
+        for batch_idx, data in enumerate(tqdm(test_loader, desc="Model Comparison", ncols=100, leave=False)):
             inputs, targets = data
             inputs = inputs.to(device)
             targets = targets.to(device)
-
-            [_, radioUnet_outputs] = radioUnet_model(inputs)
-
-            UVM_outputs = UVM_model(inputs)
-
-            REMGAN_outputs, _ = REMGAN_netG(inputs)
-
-
-
             batch_size = inputs.size(0)
             total_samples += batch_size
 
-            # 计算损失和指标
-            mse_batch = criterion(outputs, targets)
-            energy_batch = criterion(targets, torch.zeros_like(targets))
+            # 获取各个模型的输出
+            outputs_dict = {}
 
-            total_mse += mse_batch.item() * batch_size
-            total_energy += energy_batch.item() * batch_size
+            # RadioUnet 输出
+            try:
+                [radioUnet_outputs, _] = radioUnet_model(inputs)
+                outputs_dict['RadioUnet'] = radioUnet_outputs
+            except:
+                radioUnet_outputs = radioUnet_model(inputs)
+                outputs_dict['RadioUnet'] = radioUnet_outputs
 
-            if energy_batch.item() == 0:
-                nmse_loss_value = 0.0 if mse_batch.item() == 0 else float('inf')
-            else:
-                nmse_loss_value = mse_batch.item() / energy_batch.item()
+            # UVM 输出
+            try:
+                UVM_outputs = UVM_model(inputs)
+                outputs_dict['UVM'] = UVM_outputs
+            except:
+                UVM_outputs = UVM_model(inputs)
+                outputs_dict['UVM'] = UVM_outputs
 
-            ssim_batch = ssim(outputs, targets)
-            total_ssim += ssim_batch.item() * batch_size
+            # REMGAN 输出
+            try:
+                REMGAN_outputs, _ = REMGAN_netG(inputs)
+                outputs_dict['REMGAN'] = REMGAN_outputs
+            except:
+                REMGAN_outputs = REMGAN_netG(inputs)
+                outputs_dict['REMGAN'] = REMGAN_outputs
 
-            psnr_batch = psnr(outputs, targets)
-            total_psnr += psnr_batch.item() * batch_size
+            # 为每个模型计算指标
+            for model_name, outputs in outputs_dict.items():
+                # 计算损失和指标
+                mse_batch = criterion(outputs, targets)
+                energy_batch = criterion(targets, torch.zeros_like(targets))
 
-            batch_nmse_losses.append(nmse_loss_value)
-            batch_ssim_losses.append(ssim_batch.item())
-            batch_psnr_losses.append(psnr_batch.item())
-            batch_indices.append(batch_idx)
+                metrics[model_name]['total_mse'] += mse_batch.item() * batch_size
+                metrics[model_name]['total_energy'] += energy_batch.item() * batch_size
 
-            create_horizontal_comparison(outputs, targets, batch_idx, compare_dir)
+                if energy_batch.item() == 0:
+                    nmse_loss_value = 0.0 if mse_batch.item() == 0 else float('inf')
+                else:
+                    nmse_loss_value = mse_batch.item() / energy_batch.item()
 
-            comparison = torch.cat([targets[0:1], outputs[0:1]], dim=3)
-            grid = torchvision.utils.make_grid(comparison, nrow=1, normalize=True, scale_each=True)
+                ssim_batch = ssim(outputs, targets)
+                metrics[model_name]['total_ssim'] += ssim_batch.item() * batch_size
 
-    # Loss curves as requested
-    plt.figure(figsize=(15, 5))
+                psnr_batch = psnr(outputs, targets)
+                metrics[model_name]['total_psnr'] += psnr_batch.item() * batch_size
 
-    plt.subplot(1, 3, 1)
-    plt.plot(batch_indices, batch_nmse_losses, 'b-o')
-    plt.title(f'NMSE per Batch')
+                metrics[model_name]['batch_nmse'].append(nmse_loss_value)
+                metrics[model_name]['batch_ssim'].append(ssim_batch.item())
+                metrics[model_name]['batch_psnr'].append(psnr_batch.item())
+                metrics[model_name]['batch_indices'].append(batch_idx)
+
+            # 创建多模型对比图
+            create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
+
+    # 绘制对比曲线
+    plt.figure(figsize=(18, 12))
+
+    # NMSE 对比
+    plt.subplot(2, 2, 1)
+    for model_name in models.keys():
+        plt.plot(metrics[model_name]['batch_indices'],
+                 metrics[model_name]['batch_nmse'],
+                 'o-', label=model_name, markersize=3)
+    plt.title('NMSE Comparison per Batch')
     plt.xlabel('Batch Index')
     plt.ylabel('NMSE')
+    plt.legend()
     plt.grid(True)
 
-    plt.subplot(1, 3, 2)
-    plt.plot(batch_indices, batch_ssim_losses, 'r-o')
-    plt.title(f'SSIM per Batch ')
+    # SSIM 对比
+    plt.subplot(2, 2, 2)
+    for model_name in models.keys():
+        plt.plot(metrics[model_name]['batch_indices'],
+                 metrics[model_name]['batch_ssim'],
+                 'o-', label=model_name, markersize=3)
+    plt.title('SSIM Comparison per Batch')
     plt.xlabel('Batch Index')
     plt.ylabel('SSIM')
+    plt.legend()
     plt.grid(True)
 
-    plt.subplot(1, 3, 3)
-    plt.plot(batch_indices, batch_psnr_losses, 'g-o')
-    plt.title(f'PSNR per Batch ')
+    # PSNR 对比
+    plt.subplot(2, 2, 3)
+    for model_name in models.keys():
+        plt.plot(metrics[model_name]['batch_indices'],
+                 metrics[model_name]['batch_psnr'],
+                 'o-', label=model_name, markersize=3)
+    plt.title('PSNR Comparison per Batch')
     plt.xlabel('Batch Index')
     plt.ylabel('PSNR (dB)')
+    plt.legend()
     plt.grid(True)
 
+    # 计算并显示平均指标
+    avg_metrics = {}
+    for model_name in models.keys():
+        avg_mse = metrics[model_name]['total_mse'] / total_samples
+        avg_rmse = math.sqrt(avg_mse)
+
+        if metrics[model_name]['total_energy'] == 0:
+            avg_nmse = 0.0 if metrics[model_name]['total_mse'] == 0 else float('inf')
+        else:
+            avg_nmse = metrics[model_name]['total_mse'] / metrics[model_name]['total_energy']
+
+        avg_ssim = metrics[model_name]['total_ssim'] / total_samples
+        avg_psnr = metrics[model_name]['total_psnr'] / total_samples
+
+        avg_metrics[model_name] = {
+            'NMSE': avg_nmse,
+            'RMSE': avg_rmse,
+            'SSIM': avg_ssim,
+            'PSNR': avg_psnr
+        }
+
+    # 平均指标柱状图
+    plt.subplot(2, 2, 4)
+    metric_names = ['NMSE', 'SSIM', 'PSNR']
+    x = np.arange(len(metric_names))
+    width = 0.25
+
+    for i, model_name in enumerate(models.keys()):
+        values = [
+            avg_metrics[model_name]['NMSE'],
+            avg_metrics[model_name]['SSIM'],
+            avg_metrics[model_name]['PSNR']
+        ]
+        # 对NMSE取对数以便更好地显示
+        values[0] = np.log10(values[0] + 1e-10)  # 避免log(0)
+        plt.bar(x + i * width, values, width, label=model_name)
+
+    plt.xlabel('Metrics')
+    plt.ylabel('Values (log scale for NMSE)')
+    plt.title('Average Metrics Comparison')
+    plt.xticks(x + width, metric_names)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
     plt.tight_layout()
-    plt.savefig(os.path.join(compare_dir, "losses.png"))
+    plt.savefig(os.path.join(compare_dir, "model_comparison_metrics.png"), dpi=300, bbox_inches='tight')
     plt.close()
 
-    avg_mse = total_mse / total_samples if total_samples > 0 else 0
-    avg_rmse = math.sqrt(avg_mse)
+    # 打印详细指标
+    print("\n" + "=" * 60)
+    print("MODEL COMPARISON RESULTS")
+    print("=" * 60)
 
-    if total_energy == 0:
-        avg_nmse = 0.0 if total_mse == 0 else float('inf')
-    else:
-        avg_nmse = total_mse / total_energy
+    for model_name in models.keys():
+        print(f"\n{model_name}:")
+        print(f"  NMSE:  {avg_metrics[model_name]['NMSE']:.6f}")
+        print(f"  RMSE:  {avg_metrics[model_name]['RMSE']:.6f}")
+        print(f"  SSIM:  {avg_metrics[model_name]['SSIM']:.6f}")
+        print(f"  PSNR:  {avg_metrics[model_name]['PSNR']:.6f} dB")
 
-    avg_ssim = total_ssim / total_samples if total_samples > 0 else 0
-    avg_psnr = total_psnr / total_samples if total_samples > 0 else 0
+    # 保存指标到CSV文件
+    metrics_df = pd.DataFrame(avg_metrics).T
+    metrics_df.to_csv(os.path.join(compare_dir, "model_comparison_metrics.csv"))
 
-    print(f"val NMSE: {avg_nmse:.4f}")
-    print(f"val RMSE: {avg_rmse:.4f}")
-    print(f"val SSIM: {avg_ssim:.4f}")
-    print(f"val PSNR: {avg_psnr:.4f}")
-# 多个模型的曲线图
+    print(f"\nComparison results saved to: {compare_dir}")
 
-    print(1)
-
-
-
+    return avg_metrics
 
 
 if __name__ == "__main__":
@@ -215,48 +305,50 @@ if __name__ == "__main__":
 
     compare_dir = r"/home/code/radio_map_construction/runs/model_val_log/compare/"
 
-
-    WNetPhase = "secondU"
-    radioUnet_model = RadioWNet(inputs=2, phase=WNetPhase)
+    input_channels = 6
+    WNetPhase = "firstU"
+    radioUnet_model = RadioWNet(inputs=input_channels, phase=WNetPhase)
     radioUnet_model.to(device)
     radioUnet_model.eval()
-    radioUnet_load_epoch = 0
+    radioUnet_load_epoch = 3
     radioUnet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/RadioUnet/"  # 模型存储位置
     radioUnet_checkpoint_path = os.path.join(radioUnet_save_dir, f"checkpoint_{WNetPhase}_epoch_{radioUnet_load_epoch}.pth")
     radioUnet_checkpoint = torch.load(radioUnet_checkpoint_path, weights_only=True, map_location=device)
-    print(f"加载历史数据load_epoch:{radioUnet_load_epoch}成功")
+
     radioUnet_model.load_state_dict(radioUnet_checkpoint['model_state_dict'])
+    print(f"radioUnet加载历史数据load_epoch:{radioUnet_load_epoch}成功")
 
-
-    UVM_model = UVMNet(n_channels = 6)
+    UVM_model = UVMNet(n_channels = input_channels)
     UVM_model.to(device)
     UVM_model.eval()
-    UVM_load_epoch = 1
+    UVM_load_epoch = 4
     UVM_save_dir = r"/home/code/radio_map_construction/runs/model_pth/UVM/"
     UVM_checkpoint_path = os.path.join(UVM_save_dir, f"checkpoint_epoch_{UVM_load_epoch}.pth")
     UVM_checkpoint = torch.load(UVM_checkpoint_path, weights_only=True, map_location=device)
-    print(f"加载历史数据load_epoch:{UVM_load_epoch}成功")
-    UVM_model.load_state_dict(UVM_checkpoint['model_state_dict'])
 
-    REMGAN_netG = modules.RadioWNet(inputs=6,phase="firstU")
+    UVM_model.load_state_dict(UVM_checkpoint['model_state_dict'])
+    print(f"UVM 加载历史数据load_epoch:{UVM_load_epoch}成功")
+    REMGAN_netG = modules.RadioWNet(inputs=input_channels,phase="firstU")
     REMGAN_netD = Discriminator()
+    REMGAN_load_epoch = 0
     REMGAN_netG.to(device)
     REMGAN_netD.to(device)
-    REMGAN_save_dir =  r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
-    # 加载最佳检查点
-    best_checkpoint_path = os.path.join(REMGAN_save_dir, "checkpoint_REMGAN_best.pth")
-    if os.path.exists(best_checkpoint_path):
-        checkpoint = torch.load(best_checkpoint_path, map_location=device, weights_only=False)
-        REMGAN_netG.load_state_dict(checkpoint['netG_state_dict'])
-        REMGAN_netD.load_state_dict(checkpoint['netD_state_dict'])
-        print(
-            f"Loaded best model from epoch {checkpoint['epoch']} with validation loss: {checkpoint['best_loss']:.6f}")
-    else:
-        print("Warning: Best checkpoint not found. Using current model weights.")
+    # REMGAN_save_dir =  r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
+    # # 加载最佳检查点
+    # best_checkpoint_path = os.path.join(REMGAN_save_dir, f"checkpoint_REMGAN_epoch_{REMGAN_load_epoch}.pth")
+    # if os.path.exists(best_checkpoint_path):
+    #     checkpoint = torch.load(best_checkpoint_path, map_location=device, weights_only=False)
+    #     REMGAN_netG.load_state_dict(checkpoint['netG_state_dict'])
+    #     REMGAN_netD.load_state_dict(checkpoint['netD_state_dict'])
+    #     print(
+    #         f"Loaded best model from epoch {checkpoint['epoch']} with validation loss: {checkpoint['best_loss']:.6f}")
+    # else:
+    #     print("Warning: Best checkpoint not found. Using current model weights.")
 
     # 设置模型为评估模式
     REMGAN_netG.eval()
     REMGAN_netD.eval()
 
+    avg_metrics = model_compare(radioUnet_model, UVM_model, REMGAN_netG, compare_dir, test_loader, device)
 
 
