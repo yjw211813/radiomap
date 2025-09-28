@@ -16,6 +16,8 @@ from model.rem_gan import modules
 from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
 import numpy as np
 import pandas as pd
+from model.sigle_Unet.Unet_BTM import Unet_BTM
+
 
 
 
@@ -67,7 +69,7 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
     plt.close()
 
 
-def model_compare(radioUnet_model, UVM_model, REMGAN_netG, compare_dir, test_loader, device):
+def model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, compare_dir, test_loader, device):
     """
     多个模型的对比分析
     """
@@ -77,7 +79,8 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG, compare_dir, test_loa
     models = {
         'RadioUnet': radioUnet_model,
         'UVM': UVM_model,
-        'REMGAN': REMGAN_netG
+        'REMGAN': REMGAN_netG,
+        "BTMUNet": BTM_ghost_UNet_model,
     }
 
     # 存储每个模型的指标
@@ -109,28 +112,22 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG, compare_dir, test_loa
             outputs_dict = {}
 
             # RadioUnet 输出
-            try:
-                [radioUnet_outputs, _] = radioUnet_model(inputs)
-                outputs_dict['RadioUnet'] = radioUnet_outputs
-            except:
-                radioUnet_outputs = radioUnet_model(inputs)
-                outputs_dict['RadioUnet'] = radioUnet_outputs
+            radioUnet_outputs,_ = radioUnet_model(inputs)
+            outputs_dict['RadioUnet'] = radioUnet_outputs
 
             # UVM 输出
-            try:
-                UVM_outputs = UVM_model(inputs)
-                outputs_dict['UVM'] = UVM_outputs
-            except:
-                UVM_outputs = UVM_model(inputs)
-                outputs_dict['UVM'] = UVM_outputs
+            UVM_outputs = UVM_model(inputs)
+            outputs_dict['UVM'] = UVM_outputs
 
             # REMGAN 输出
-            try:
-                REMGAN_outputs, _ = REMGAN_netG(inputs)
-                outputs_dict['REMGAN'] = REMGAN_outputs
-            except:
-                REMGAN_outputs = REMGAN_netG(inputs)
-                outputs_dict['REMGAN'] = REMGAN_outputs
+            REMGAN_outputs ,_ = REMGAN_netG(inputs)
+            outputs_dict['REMGAN'] = REMGAN_outputs
+
+            # BTMUNet 输出
+            BTMUNet_outputs = BTM_ghost_UNet_model(inputs)
+            outputs_dict['BTMUNet'] = BTMUNet_outputs
+
+
 
             # 为每个模型计算指标
             for model_name, outputs in outputs_dict.items():
@@ -349,6 +346,24 @@ if __name__ == "__main__":
     REMGAN_netG.eval()
     REMGAN_netD.eval()
 
-    avg_metrics = model_compare(radioUnet_model, UVM_model, REMGAN_netG, compare_dir, test_loader, device)
 
 
+
+    BTM_ghost_UNet_input_shape = [input_channels, 256, 256]
+    BTM_ghost_UNet_output_shape = [1, 256, 256]
+    C_down_list = [32, 64, 128, 256]
+    C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
+    attn_params = [C_list_attn * 2, C_list_attn, C_list_attn // 2, C_list_attn // 2]
+    BTM_ghost_UNet_model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape, C_down_list, attn_params)
+    # load_epoch = 36
+    # BTM_ghost_UNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"
+    #
+    # BTM_ghost_UNet_checkpoint_path = os.path.join(BTM_ghost_UNet_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
+    # BTM_ghost_UNet_checkpoint = torch.load(BTM_ghost_UNet_checkpoint_path, weights_only=True, map_location=device)
+    # print(f"加载历史数据load_epoch:{load_epoch}成功")
+    # BTM_ghost_UNet_model.load_state_dict(BTM_ghost_UNet_checkpoint['model_state_dict'])
+
+    BTM_ghost_UNet_model.to(device)
+    BTM_ghost_UNet_model.eval()  # Set model to evaluation mode
+
+    avg_metrics = model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, compare_dir, test_loader, device)
