@@ -102,7 +102,7 @@ class UVM_app():
         scheduler = DynamicLRScheduler(
             optimizer,
             lr_min=1e-6,  # 最小学习率
-            lr_max=1e-3,  # 最大学习率
+            lr_max=1e-4,  # 最大学习率
             warmup_epochs=self.warmup_epochs,  # 前warmup_epochs个epoch学习率上升
             decay_epochs=total_epoch - self.warmup_epochs  # 后面epoch学习率下降
         )
@@ -112,7 +112,7 @@ class UVM_app():
             checkpoint_path = os.path.join(self.model_save_dir, f"checkpoint_epoch_{self.start_epoch}.pth")
             checkpoint = torch.load(checkpoint_path)
             # model.load_state_dict(checkpoint)
-            print("加载历史数据成功")
+            print(f"load record sucess! epoch: checkpoint_epoch_{self.start_epoch}.pth")
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])

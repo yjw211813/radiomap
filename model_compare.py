@@ -19,12 +19,10 @@ import pandas as pd
 from model.sigle_Unet.Unet_BTM import Unet_BTM
 
 
-
-
-
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
     """
-    创建多个模型的对比图像
+    创建多个模型的对比图像 - 修改版本
+    每个PNG只显示4个targets，targets放在最右边
     """
     # 转换为numpy数组
     if torch.is_tensor(targets):
@@ -33,45 +31,60 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
     # 移除通道维度
     targets = targets.squeeze(1)
 
-    num_batches = targets.shape[0]
-    num_models = len(outputs_dict) + 1  # +1 for targets
+    # 只取前4个样本
+    num_samples = min(4, targets.shape[0])
+    targets = targets[:num_samples]
+
+    # 同样处理每个模型的输出，只取前4个
+    processed_outputs_dict = {}
+    for model_name, outputs in outputs_dict.items():
+        if torch.is_tensor(outputs):
+            outputs = outputs.cpu().numpy()
+        outputs = outputs.squeeze(1)
+        processed_outputs_dict[model_name] = outputs[:num_samples]
+
+    num_models = len(processed_outputs_dict) + 1  # +1 for targets
 
     # 创建一个大图像，包含所有模型和目标的对比
-    fig, axes = plt.subplots(num_batches, num_models, figsize=(4 * num_models, 4 * num_batches))
+    # 布局：行数为样本数，列数为模型数，targets放在最右边
+    fig, axes = plt.subplots(num_samples, num_models, figsize=(4 * num_models, 4 * num_samples))
 
-    # 处理只有1个批次的情况
-    if num_batches == 1:
+    # 处理只有1个样本的情况
+    if num_samples == 1:
         axes = axes.reshape(1, num_models)
 
-    model_names = ['Target'] + list(outputs_dict.keys())
+    # 模型名称顺序（targets放在最后）
+    model_names = list(processed_outputs_dict.keys()) + ['Target']
 
-    for i in range(num_batches):
-        # 显示target
-        ax = axes[i, 0] if num_batches > 1 else axes[0]
+    for i in range(num_samples):
+        # 先显示各个模型的输出
+        for j, model_name in enumerate(processed_outputs_dict.keys()):
+            output_img = processed_outputs_dict[model_name][i]
+
+            ax = axes[i, j] if num_samples > 1 else axes[j]
+            im = ax.imshow(output_img, cmap='jet')
+
+            # 特殊处理BTMUNet标题
+            if model_name == 'BTMUNet':
+                ax.set_title(f"BTMUNet(ours)", color='red', fontweight='bold')
+            else:
+                ax.set_title(f"{model_name}")
+            ax.axis('off')
+
+        # 最后显示target（最右边）
+        ax = axes[i, num_models - 1] if num_samples > 1 else axes[num_models - 1]
         im = ax.imshow(targets[i], cmap='jet')
         ax.set_title(f"Target")
         ax.axis('off')
-
-        # 显示各个模型的输出
-        for j, (model_name, outputs) in enumerate(outputs_dict.items()):
-            output_img = outputs[i]
-            if torch.is_tensor(output_img):
-                output_img = output_img.cpu().numpy()
-            output_img = output_img.squeeze()
-
-            ax = axes[i, j + 1] if num_batches > 1 else axes[j + 1]
-            im = ax.imshow(output_img, cmap='jet')
-            ax.set_title(f"{model_name}")
-            ax.axis('off')
 
     plt.tight_layout()
     plt.savefig(os.path.join(compare_dir, f"batch_{batch_idx}_model_comparison.png"), dpi=300, bbox_inches='tight')
     plt.close()
 
 
-def model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, compare_dir, test_loader, device):
+def model_compare(radioUnet_model, UVM_model, REMGAN_netG, BTM_ghost_UNet_model, compare_dir, test_loader, device):
     """
-    多个模型的对比分析
+    多个模型的对比分析 - 修改版本
     """
     criterion = nn.MSELoss()
 
@@ -101,7 +114,11 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, 
     os.makedirs(compare_dir, exist_ok=True)
 
     with torch.no_grad():
+        # 只测试前10个批次
         for batch_idx, data in enumerate(tqdm(test_loader, desc="Model Comparison", ncols=100, leave=False)):
+            if batch_idx >= 20:  # 只测试前10个批次
+                break
+
             inputs, targets = data
             inputs = inputs.to(device)
             targets = targets.to(device)
@@ -112,7 +129,7 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, 
             outputs_dict = {}
 
             # RadioUnet 输出
-            radioUnet_outputs,_ = radioUnet_model(inputs)
+            radioUnet_outputs, _ = radioUnet_model(inputs)
             outputs_dict['RadioUnet'] = radioUnet_outputs
 
             # UVM 输出
@@ -120,28 +137,30 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, 
             outputs_dict['UVM'] = UVM_outputs
 
             # REMGAN 输出
-            REMGAN_outputs ,_ = REMGAN_netG(inputs)
+            REMGAN_outputs, _ = REMGAN_netG(inputs)
             outputs_dict['REMGAN'] = REMGAN_outputs
 
             # BTMUNet 输出
             BTMUNet_outputs = BTM_ghost_UNet_model(inputs)
             outputs_dict['BTMUNet'] = BTMUNet_outputs
 
-
-
             # 为每个模型计算指标
             for model_name, outputs in outputs_dict.items():
                 # 计算损失和指标
                 mse_batch = criterion(outputs, targets)
-                energy_batch = criterion(targets, torch.zeros_like(targets))
+
+                # 修正：计算每个样本的能量，然后求和
+                energy_per_sample = torch.mean(targets ** 2, dim=[1, 2, 3])  # 每个样本的平均能量
+                energy_batch = torch.sum(energy_per_sample)  # 批次总能量
 
                 metrics[model_name]['total_mse'] += mse_batch.item() * batch_size
-                metrics[model_name]['total_energy'] += energy_batch.item() * batch_size
+                metrics[model_name]['total_energy'] += energy_batch.item()
 
+                # 修正NMSE计算：使用批次内平均
                 if energy_batch.item() == 0:
                     nmse_loss_value = 0.0 if mse_batch.item() == 0 else float('inf')
                 else:
-                    nmse_loss_value = mse_batch.item() / energy_batch.item()
+                    nmse_loss_value = (mse_batch.item() * batch_size) / energy_batch.item()
 
                 ssim_batch = ssim(outputs, targets)
                 metrics[model_name]['total_ssim'] += ssim_batch.item() * batch_size
@@ -202,6 +221,7 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, 
         avg_mse = metrics[model_name]['total_mse'] / total_samples
         avg_rmse = math.sqrt(avg_mse)
 
+        # 修正avg_nmse计算：使用总MSE和总能量
         if metrics[model_name]['total_energy'] == 0:
             avg_nmse = 0.0 if metrics[model_name]['total_mse'] == 0 else float('inf')
         else:
@@ -246,7 +266,7 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, 
 
     # 打印详细指标
     print("\n" + "=" * 60)
-    print("MODEL COMPARISON RESULTS")
+    print("MODEL COMPARISON RESULTS (First 10 batches)")
     print("=" * 60)
 
     for model_name in models.keys():
@@ -266,8 +286,7 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, 
 
 
 if __name__ == "__main__":
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
-
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
 
     simuSetDict = {
         "ind1": 0,  # 起始索引
@@ -291,9 +310,9 @@ if __name__ == "__main__":
         "formula_flag": True
     }
 
-    train_batch_size = 16
-    val_batch_size = 16
-    test_batch_size = 16
+    train_batch_size = 4
+    val_batch_size = 4
+    test_batch_size = 4
     # 加载数据集
 
     Radio_test = RadioMapSeerLoader(simuSetDict, phase="test")
@@ -307,47 +326,46 @@ if __name__ == "__main__":
     radioUnet_model = RadioWNet(inputs=input_channels, phase=WNetPhase)
     radioUnet_model.to(device)
     radioUnet_model.eval()
-    radioUnet_load_epoch = 3
+    radioUnet_load_epoch = 60
     radioUnet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/RadioUnet/"  # 模型存储位置
-    radioUnet_checkpoint_path = os.path.join(radioUnet_save_dir, f"checkpoint_{WNetPhase}_epoch_{radioUnet_load_epoch}.pth")
+    radioUnet_checkpoint_path = os.path.join(radioUnet_save_dir,
+                                             f"checkpoint_{WNetPhase}_epoch_{radioUnet_load_epoch}.pth")
     radioUnet_checkpoint = torch.load(radioUnet_checkpoint_path, weights_only=True, map_location=device)
 
     radioUnet_model.load_state_dict(radioUnet_checkpoint['model_state_dict'])
     print(f"radioUnet加载历史数据load_epoch:{radioUnet_load_epoch}成功")
 
-    UVM_model = UVMNet(n_channels = input_channels)
+    UVM_model = UVMNet(n_channels=input_channels)
     UVM_model.to(device)
     UVM_model.eval()
-    UVM_load_epoch = 4
+    UVM_load_epoch = 20
     UVM_save_dir = r"/home/code/radio_map_construction/runs/model_pth/UVM/"
     UVM_checkpoint_path = os.path.join(UVM_save_dir, f"checkpoint_epoch_{UVM_load_epoch}.pth")
     UVM_checkpoint = torch.load(UVM_checkpoint_path, weights_only=True, map_location=device)
 
     UVM_model.load_state_dict(UVM_checkpoint['model_state_dict'])
     print(f"UVM 加载历史数据load_epoch:{UVM_load_epoch}成功")
-    REMGAN_netG = modules.RadioWNet(inputs=input_channels,phase="firstU")
+
+    REMGAN_netG = modules.RadioWNet(inputs=input_channels, phase="firstU")
     REMGAN_netD = Discriminator()
-    REMGAN_load_epoch = 0
+    REMGAN_load_epoch = 15
     REMGAN_netG.to(device)
     REMGAN_netD.to(device)
-    # REMGAN_save_dir =  r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
-    # # 加载最佳检查点
-    # best_checkpoint_path = os.path.join(REMGAN_save_dir, f"checkpoint_REMGAN_epoch_{REMGAN_load_epoch}.pth")
-    # if os.path.exists(best_checkpoint_path):
-    #     checkpoint = torch.load(best_checkpoint_path, map_location=device, weights_only=False)
-    #     REMGAN_netG.load_state_dict(checkpoint['netG_state_dict'])
-    #     REMGAN_netD.load_state_dict(checkpoint['netD_state_dict'])
-    #     print(
-    #         f"Loaded best model from epoch {checkpoint['epoch']} with validation loss: {checkpoint['best_loss']:.6f}")
-    # else:
-    #     print("Warning: Best checkpoint not found. Using current model weights.")
+    REMGAN_save_dir = r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
+    # 加载最佳检查点
+    best_checkpoint_path = os.path.join(REMGAN_save_dir, f"checkpoint_REMGAN_epoch_{REMGAN_load_epoch}.pth")
+    if os.path.exists(best_checkpoint_path):
+        checkpoint = torch.load(best_checkpoint_path, map_location=device, weights_only=False)
+        REMGAN_netG.load_state_dict(checkpoint['netG_state_dict'])
+        REMGAN_netD.load_state_dict(checkpoint['netD_state_dict'])
+        print(
+            f"Loaded best model from epoch {checkpoint['epoch']} with validation loss: {checkpoint['best_loss']:.6f}")
+    else:
+        print("Warning: Best checkpoint not found. Using current model weights.")
 
     # 设置模型为评估模式
     REMGAN_netG.eval()
     REMGAN_netD.eval()
-
-
-
 
     BTM_ghost_UNet_input_shape = [input_channels, 256, 256]
     BTM_ghost_UNet_output_shape = [1, 256, 256]
@@ -355,15 +373,16 @@ if __name__ == "__main__":
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
     attn_params = [C_list_attn * 2, C_list_attn, C_list_attn // 2, C_list_attn // 2]
     BTM_ghost_UNet_model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape, C_down_list, attn_params)
-    # load_epoch = 36
-    # BTM_ghost_UNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"
-    #
-    # BTM_ghost_UNet_checkpoint_path = os.path.join(BTM_ghost_UNet_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
-    # BTM_ghost_UNet_checkpoint = torch.load(BTM_ghost_UNet_checkpoint_path, weights_only=True, map_location=device)
-    # print(f"加载历史数据load_epoch:{load_epoch}成功")
-    # BTM_ghost_UNet_model.load_state_dict(BTM_ghost_UNet_checkpoint['model_state_dict'])
+    load_epoch = 51
+    BTM_ghost_UNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet/"
+
+    BTM_ghost_UNet_checkpoint_path = os.path.join(BTM_ghost_UNet_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
+    BTM_ghost_UNet_checkpoint = torch.load(BTM_ghost_UNet_checkpoint_path, weights_only=True, map_location=device)
+    print(f"加载历史数据load_epoch:{load_epoch}成功")
+    BTM_ghost_UNet_model.load_state_dict(BTM_ghost_UNet_checkpoint['model_state_dict'])
 
     BTM_ghost_UNet_model.to(device)
     BTM_ghost_UNet_model.eval()  # Set model to evaluation mode
 
-    avg_metrics = model_compare(radioUnet_model, UVM_model, REMGAN_netG,BTM_ghost_UNet_model, compare_dir, test_loader, device)
+    avg_metrics = model_compare(radioUnet_model, UVM_model, REMGAN_netG, BTM_ghost_UNet_model, compare_dir, test_loader,
+                                device)

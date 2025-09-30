@@ -10,7 +10,7 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     train_batch_size = 16  # 批次大小
     val_batch_size = 16
-    test_batch_size = 8  # 批次大小1
+    test_batch_size = 16  # 批次大小1
     
     simuSetDict = {
         "ind1": 0,  # 起始索引
@@ -24,16 +24,15 @@ if __name__ == '__main__':
         "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
         "cityMap": "complete",  # 是否输入完全的城市地图
         "missing": 1,  # 地图缺失号码
-        "fix_samples": 300,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+        "fix_samples": 655,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
         "num_samples_low": 10,  # 最低采样数
         "num_samples_high": 300,  # 最高采样数
-        "inter_flag":True, # 看是否需要插值图像
-        "scale256_flag": False,  # 取值范围是否为0 - 255
-        "sample_flag": True,    # 是否有采样输入
-        "loss_samples_flag":False,# 是否定义loss为稀疏采样loss
-        "formula_flag":False
+        "inter_flag": True,  # 看是否需要插值图像
+        "scale256_flag": True,  # 取值范围是否为0 - 255
+        "sample_flag": True,  # 是否有采样输入
+        "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
+        "formula_flag": True
     }
-
     # 加载数据集
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
     Radio_val = RadioMapSeerLoader(simuSetDict, phase="val")
@@ -48,16 +47,16 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
 
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/MS_no_cars256/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/MS_no_cars256/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_Unet/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet/"# 模型存储位置
 
     os.makedirs(model_save_dir, exist_ok=True)
 
-    print("MS_no_cars256")
+    print("BTM_Unet")
     # 定义模型
 
-    BTM_ghost_UNet_input_shape = [5, 256, 256]
+    BTM_ghost_UNet_input_shape = [6, 256, 256]
     BTM_ghost_UNet_output_shape = [1, 256, 256]
     C_down_list =  [32, 64, 128, 256]
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
@@ -67,9 +66,9 @@ if __name__ == '__main__':
     # 定义训练对象
     warmup_epochs = 4
     total_epoch = 80
-    start_epoch = 3
+    start_epoch = 0
 
     app = Unet_BTM_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
     load_epoch = 0
-    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/MS_no_cars256/"
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/BTM_Unet/"
     app.train(model, train_loader, val_loader, total_epoch)

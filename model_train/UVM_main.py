@@ -1,5 +1,5 @@
 import torch
-from model_app.Unet_BTM_app import Unet_BTM_app
+from model_app.UVM_app import UVM_app
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.UVM.UVM_model import UVMNet
@@ -61,11 +61,11 @@ if __name__ == '__main__':
     model = UVMNet(n_channels = 6)
 
     # 定义训练对象
-    warmup_epochs = 4
+    warmup_epochs = 2
     total_epoch = 80
-    start_epoch = 1
+    start_epoch = 4
 
-    app = Unet_BTM_app(start_epoch, log_dir, warmup_epochs, model_save_dir, device)
+    app = UVM_app(start_epoch, log_dir, warmup_epochs, model_save_dir, device)
     load_epoch = 1
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/UVM/"
     app.train(model, train_loader, val_loader, total_epoch)

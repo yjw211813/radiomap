@@ -112,7 +112,7 @@ class Unet_BTM_app():
             checkpoint_path = os.path.join(self.model_save_dir, f"checkpoint_epoch_{self.start_epoch}.pth")
             checkpoint = torch.load(checkpoint_path)
             # model.load_state_dict(checkpoint)
-            print("加载历史数据成功")
+            print(f"load record sucess! epoch: checkpoint_epoch_{self.start_epoch}.pth")
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])

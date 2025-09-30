@@ -291,8 +291,6 @@ class REM_GAN_app():
             self.val_loss = []
             for inputs, targets in self.val_loader:
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
-                up_sampled = inputs[:, 3, :, :]
-                inputs = inputs[:, :3, :, :]
                 [fake, _] = self.netG(inputs)
                 v_loss = self.lossG(fake, targets)
                 self.val_loss += [v_loss.item()]

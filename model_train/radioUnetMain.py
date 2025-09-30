@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     # 定义训练对象
     step_size = 30
-    total_epoch = 120
+    total_epoch = 90
     start_epoch = 0
     app = RadioWNet_app(start_epoch, log_dir, step_size, model_save_dir, device)
 
