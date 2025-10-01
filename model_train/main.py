@@ -47,9 +47,9 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
 
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_Unet/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/BTM_Unet_1/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet_1/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet_1/"# 模型存储位置
 
     os.makedirs(model_save_dir, exist_ok=True)
 
@@ -64,11 +64,11 @@ if __name__ == '__main__':
     model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params)
 
     # 定义训练对象
-    warmup_epochs = 4
-    total_epoch = 80
+    warmup_epochs = 5
+    total_epoch = 160
     start_epoch = 0
 
     app = Unet_BTM_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
     load_epoch = 0
-    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/BTM_Unet/"
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/BTM_Unet_1/"
     app.train(model, train_loader, val_loader, total_epoch)

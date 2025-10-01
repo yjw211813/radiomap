@@ -32,7 +32,11 @@ class Unet_BTM_app():
         total_psnr = 0.0
 
         with torch.no_grad():
-            for inputs, targets in tqdm(val_loader, desc="Evaluating", ncols=100, leave=False):
+            for batch_idx, data  in enumerate(tqdm(val_loader, desc="Evaluating", ncols=100, leave=False)):
+                if batch_idx >= 20:  # 只测试前10个批次
+                    break
+
+                inputs, targets = data
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
 
@@ -83,7 +87,7 @@ class Unet_BTM_app():
 
 
         model.to(self.device)
-        eval_interval = 10
+        eval_interval = 1
         # 清空 log_dir 下的文件（如果存在）
         if self.start_epoch == 0 and os.path.exists(self.log_dir):
             shutil.rmtree(self.log_dir)

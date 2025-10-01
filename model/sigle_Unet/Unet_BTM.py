@@ -9,7 +9,7 @@ from model.sub_block.top_conv import SK_Channel_atten2D,fractal_conv
 from model.sub_block.mid_conv import inception_ghost_sum,inception_sum
 from model.sub_block.low_conv import multiScaleConvDown,multiScaleUpSample
 from torch.nn import functional as F
-
+from model.sub_block.statistic_tools import gpu_statistic
 
 
 
@@ -28,9 +28,9 @@ class BTM_Net(nn.Module):
         C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
         # 构建编码器
         layers = []
-        layers.append(inception_ghost_sum(C_in=self.input_channel, C_out=C_list[0], kernel_list=[1, 3, 5, 7], dilated_list=[1,1,1,1]))
+        layers.append(inception_ghost_sum(C_in=self.input_channel, C_out=C_list[0], kernel_list=[3, 5, 7, 9], dilated_list=[1,1,1,1]))
         for i in range(len(C_list) - 1):
-            layers.append(inception_ghost_sum(C_in=C_list[i], C_out=C_list[i + 1], kernel_list=[1, 3, 5, 7],  dilated_list=[1,1,1,1]))
+            layers.append(inception_ghost_sum(C_in=C_list[i], C_out=C_list[i + 1], kernel_list=[3, 5, 7, 9],  dilated_list=[1,1,1,1]))
         self.encoder = nn.Sequential(*layers)
         self.gelu = nn.GELU()
 
@@ -54,13 +54,13 @@ class Unet_BTM(nn.Module):
         in_ch = self.input_channel
         for out_ch in C_down_list:
             self.encoder.append(nn.Sequential(
-                inception_ghost_sum(C_in=in_ch, C_out=out_ch,  kernel_list=[1, 3, 5, 7], dilated_list=[1,1,1,1]),
+                inception_ghost_sum(C_in=in_ch, C_out=out_ch,  kernel_list=kernel_sizes, dilated_list=[1,1,1,1]),
                 multiScaleConvDown(out_ch,kernel_sizes)
             ))
             in_ch = out_ch
 
         # 中心卷积层
-        self.conv_center = fractal_conv(C_in=C_down_list[-1],C_out=C_down_list[-1],kernel_list = [1, 3, 5, 7],dilated_list = [1,1,1,1],inception_module = inception_sum)
+        self.conv_center = fractal_conv(C_in=C_down_list[-1],C_out=C_down_list[-1],kernel_list = kernel_sizes,dilated_list = [1,1,1,1],inception_module = inception_sum)
 
         # 创建上采样路径（解码器）
         self.decodes = nn.ModuleList()
@@ -68,7 +68,7 @@ class Unet_BTM(nn.Module):
             i = i -1
             self.decodes.append(
                 nn.Sequential(
-                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i], kernel_list=[1, 3, 5, 7], dilated_list=[1,1,1,1]),
+                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i], kernel_list=kernel_sizes, dilated_list=[1,1,1,1]),
                     multiScaleUpSample(C_down_list[i],kernel_sizes,factor=0.5)
                 )
             )
@@ -135,7 +135,7 @@ class Unet_BTM(nn.Module):
 
 def Unet_BTM_test():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(device)
+    get_gpu_info = gpu_statistic(device)
     batch_size = 2
     feature_num = 4
     img_H = 32
@@ -147,9 +147,10 @@ def Unet_BTM_test():
     C_down_list = [64, 128, 256, 512]
     C_list_attn = torch.tensor([64, 64, 128, 128, 128])
     attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-    net = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
-    output = net(input_data)
-    print(f"Output shape: {output.shape}")
+    model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
+    x = input_data
+    get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info", x, model)
+
 
 
 if __name__ == '__main__':

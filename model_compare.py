@@ -286,7 +286,7 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG, BTM_ghost_UNet_model,
 
 
 if __name__ == "__main__":
-    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
     simuSetDict = {
         "ind1": 0,  # 起始索引
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     radioUnet_model = RadioWNet(inputs=input_channels, phase=WNetPhase)
     radioUnet_model.to(device)
     radioUnet_model.eval()
-    radioUnet_load_epoch = 60
+    radioUnet_load_epoch = 35
     radioUnet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/RadioUnet/"  # 模型存储位置
     radioUnet_checkpoint_path = os.path.join(radioUnet_save_dir,
                                              f"checkpoint_{WNetPhase}_epoch_{radioUnet_load_epoch}.pth")
@@ -338,7 +338,7 @@ if __name__ == "__main__":
     UVM_model = UVMNet(n_channels=input_channels)
     UVM_model.to(device)
     UVM_model.eval()
-    UVM_load_epoch = 20
+    UVM_load_epoch = 33
     UVM_save_dir = r"/home/code/radio_map_construction/runs/model_pth/UVM/"
     UVM_checkpoint_path = os.path.join(UVM_save_dir, f"checkpoint_epoch_{UVM_load_epoch}.pth")
     UVM_checkpoint = torch.load(UVM_checkpoint_path, weights_only=True, map_location=device)
@@ -348,7 +348,7 @@ if __name__ == "__main__":
 
     REMGAN_netG = modules.RadioWNet(inputs=input_channels, phase="firstU")
     REMGAN_netD = Discriminator()
-    REMGAN_load_epoch = 15
+    REMGAN_load_epoch = 21
     REMGAN_netG.to(device)
     REMGAN_netD.to(device)
     REMGAN_save_dir = r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
@@ -373,7 +373,7 @@ if __name__ == "__main__":
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
     attn_params = [C_list_attn * 2, C_list_attn, C_list_attn // 2, C_list_attn // 2]
     BTM_ghost_UNet_model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape, C_down_list, attn_params)
-    load_epoch = 51
+    load_epoch = 39
     BTM_ghost_UNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet/"
 
     BTM_ghost_UNet_checkpoint_path = os.path.join(BTM_ghost_UNet_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
