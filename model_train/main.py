@@ -53,7 +53,7 @@ if __name__ == '__main__':
 
     os.makedirs(model_save_dir, exist_ok=True)
 
-    print("BTM_Unet")
+    print("SAUnet")
     # 定义模型
 
     BTM_ghost_UNet_input_shape = [6, 256, 256]
