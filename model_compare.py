@@ -16,7 +16,7 @@ from model.rem_gan import modules
 from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
 import numpy as np
 import pandas as pd
-from model.sigle_Unet.Unet_BTM import Unet_BTM
+from model.sigle_Unet.SAUnet import Unet_BTM
 
 
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):

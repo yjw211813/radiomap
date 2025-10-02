@@ -28,11 +28,11 @@ class BTM_Net(nn.Module):
         C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
         # 构建编码器
         layers = []
-        layers.append(inception_ghost_sum(C_in=self.input_channel, C_out=C_list[0], kernel_list=[3, 5, 7, 9], dilated_list=[1,1,1,1]))
+        layers.append(inception_sum(C_in=self.input_channel, C_out=C_list[0], kernel_list=[3, 5, 7, 9], dilated_list=[1,1,1,1]))
         for i in range(len(C_list) - 1):
-            layers.append(inception_ghost_sum(C_in=C_list[i], C_out=C_list[i + 1], kernel_list=[3, 5, 7, 9],  dilated_list=[1,1,1,1]))
+            layers.append(inception_sum(C_in=C_list[i], C_out=C_list[i + 1], kernel_list=[3, 5, 7, 9],  dilated_list=[1,1,1,1]))
         self.encoder = nn.Sequential(*layers)
-        self.gelu = nn.GELU()
+
 
     def forward(self, condition_map):
 
@@ -42,10 +42,10 @@ class BTM_Net(nn.Module):
         return out_map
 
 
-class Unet_BTM(nn.Module):
+class SAUnet(nn.Module):
     # 修改上卷积方法
     def __init__(self, input_shape, output_shape, C_down_list,attn_params):
-        super(Unet_BTM, self).__init__()
+        super(SAUnet, self).__init__()
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
         kernel_sizes = [3, 5, 7, 9]
@@ -54,7 +54,7 @@ class Unet_BTM(nn.Module):
         in_ch = self.input_channel
         for out_ch in C_down_list:
             self.encoder.append(nn.Sequential(
-                inception_ghost_sum(C_in=in_ch, C_out=out_ch,  kernel_list=kernel_sizes, dilated_list=[1,1,1,1]),
+                inception_sum(C_in=in_ch, C_out=out_ch,  kernel_list=kernel_sizes, dilated_list=[1,1,1,1], norm = False),
                 multiScaleConvDown(out_ch,kernel_sizes)
             ))
             in_ch = out_ch
@@ -68,7 +68,7 @@ class Unet_BTM(nn.Module):
             i = i -1
             self.decodes.append(
                 nn.Sequential(
-                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i], kernel_list=kernel_sizes, dilated_list=[1,1,1,1]),
+                    inception_sum(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i], kernel_list=kernel_sizes, dilated_list=[1,1,1,1], norm = False),
                     multiScaleUpSample(C_down_list[i],kernel_sizes,factor=0.5)
                 )
             )
@@ -147,7 +147,7 @@ def Unet_BTM_test():
     C_down_list = [64, 128, 256, 512]
     C_list_attn = torch.tensor([64, 64, 128, 128, 128])
     attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-    model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
+    model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params).to(device)
     x = input_data
     get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info", x, model)
 

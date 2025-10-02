@@ -12,7 +12,7 @@ class Swish_act(nn.Module):
 
 
 class BasicNormConv(nn.Module):
-    def __init__(self, C_in, C_out, kernel_size, dilation = 1, dropout_rate=0.05,groups = 1,gelu=True,norm = True):
+    def __init__(self, C_in, C_out, kernel_size, dilation = 1, dropout_rate=0,groups = 1,gelu=True,norm = True):
         super(BasicNormConv, self).__init__()
         dilated_kernel_size = (kernel_size - 1) * dilation + 1
         padding_width = (dilated_kernel_size - 1) // 2

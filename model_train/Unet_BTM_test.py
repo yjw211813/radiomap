@@ -2,7 +2,7 @@ import torch
 from model_app.Unet_BTM_app import Unet_BTM_app
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
-from model.sigle_Unet.Unet_BTM import Unet_BTM
+from model.sigle_Unet.SAUnet import Unet_BTM
 import os
 
 
