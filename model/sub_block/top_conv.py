@@ -175,27 +175,27 @@ class fractal_conv(nn.Module):
         super(fractal_conv, self).__init__()
         if C_out % 4 != 0:
             raise ValueError(f"C_out ({C_out}) must be divisible by 4")
-
-
+        norm_flag = True
+        print("fractal_conv norm:",norm_flag)
         sub_Cout = int(C_out / 4)
 
-        self.conv0001 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0002 = inception_module(C_in=sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0010 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0100 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv1000 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
+        self.conv0001 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0002 = inception_module(C_in=sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0010 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0100 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv1000 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
 
-        self.conv0003 = inception_module(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0004 = inception_module(C_in=sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0020 = inception_module(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
+        self.conv0003 = inception_module(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0004 = inception_module(C_in=sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0020 = inception_module(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
 
-        self.conv0005 = inception_module(C_in=sub_Cout*3, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0006 = inception_module(C_in=sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0030 = inception_module(C_in=sub_Cout*3, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0007 = inception_module(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0008 = inception_module(C_in=sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0040 = inception_module(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
-        self.conv0200 = inception_module(C_in=sub_Cout*3, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = False)
+        self.conv0005 = inception_module(C_in=sub_Cout*3, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0006 = inception_module(C_in=sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0030 = inception_module(C_in=sub_Cout*3, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0007 = inception_module(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0008 = inception_module(C_in=sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0040 = inception_module(C_in=sub_Cout+sub_Cout, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
+        self.conv0200 = inception_module(C_in=sub_Cout*3, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)
 
     def forward(self, x):
         ######################

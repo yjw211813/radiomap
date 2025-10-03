@@ -84,7 +84,7 @@ class Unet_BTM_app():
         writer.add_scalar('PSNR/val', avg_psnr, epoch)
 
     def train(self, model, train_loader, val_loader, total_epoch, save_interval=1):
-
+        print("修正学习率")
 
         model.to(self.device)
         eval_interval = 1
@@ -105,8 +105,8 @@ class Unet_BTM_app():
 
         scheduler = DynamicLRScheduler(
             optimizer,
-            lr_min=1e-6,  # 最小学习率
-            lr_max=1e-3,  # 最大学习率
+            lr_min=1e-5,  # 最小学习率
+            lr_max= 5e-4,  # 最大学习率
             warmup_epochs=self.warmup_epochs,  # 前warmup_epochs个epoch学习率上升
             decay_epochs=total_epoch - self.warmup_epochs  # 后面epoch学习率下降
         )
