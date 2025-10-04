@@ -53,14 +53,18 @@ class SANet(nn.Module):
         self.input_channel  = C_in
 
         self.output_channel , self.output_H , self.output_W = output_shape
+        layers = []
+        layers.append(resConv(C_in=self.input_channel,C_out=self.output_channel,kernel_list=kernel_list,dilated_list=dilated_list,attn=attn))
+        for i in range(3):
+            layers.append(resConv(C_in=self.output_channel,C_out=self.output_channel,kernel_list=kernel_list,dilated_list=dilated_list,attn=attn))
+        self.encoder = nn.Sequential(*layers)
 
-        self.encoder = resConv(C_in=self.input_channel,C_out=self.output_channel,kernel_list=kernel_list,dilated_list=dilated_list,attn=attn)
 
 
-    def forward(self, inps,condition):
+    def forward(self, inps):
 
         resized_map = F.interpolate(inps, size=(self.output_H, self.output_W), mode='bilinear', align_corners=True)
-        out_map = self.encoder(torch.cat([resized_map, condition], dim=1))
+        out_map = self.encoder(resized_map)
 
         return out_map
 
@@ -73,19 +77,16 @@ def SANet_test():
     img_H = 256
     img_W = 256
     C_in = 6
-    C_in2 = 34
     C_out = 32
     # 创建输入数据
     input_data1 = torch.randn(batch_size, C_in, img_H, img_W).to(device)
-    input_data2 = torch.randn(batch_size, C_in2, 32, 32).to(device)
-    input_shape = [C_in, img_H, img_W]
     output_shape = [C_out, 32, 32]
 
     # 测试用例1: 基础配置 (使用Attn)
     print("\n1. Testing resConv with Attn (C_in != C_out):")
-    model = SANet(C_in = C_in+C_in2,output_shape= output_shape).to(device)
+    model = SANet(C_in = C_in,output_shape= output_shape).to(device)
 
-    get_gpu_info.print_gpu_memory(description = "Conv3x3_DownSample GPU info", x = input_data1,model = model,temb=input_data2)
+    get_gpu_info.print_gpu_memory(description = "Conv3x3_DownSample GPU info", x = input_data1,model = model)
 
 
 
@@ -104,19 +105,19 @@ class SAUnetDown(nn.Module):
         return self.conv (x)
 
 class SAUnetUp(nn.Module):
-    def __init__(self, C_in, C_out,kernel_list = [3,5], dilated_list = [1,1],attn = "LSKNet"):
+    def __init__(self, C_in, C_out,outSize,kernel_list = [3,5], dilated_list = [1,1],attn = "LSKNet"):
         super(SAUnetUp, self).__init__()
         simple_flag = False
 
         kernel_sizes = [3,5,7]
-
+        outShape = [C_in // 2, outSize, outSize]
         self.up =  nn.ConvTranspose2d(C_in, C_in // 2, kernel_size=2, stride=2)  if simple_flag else multiScaleUpSample(C_in,kernel_sizes,factor=0.5)
-
+        self.SA_atten = SANet(6, outShape, attn="LSKNet")
         self.conv = resConv(C_in=C_in,C_out=C_out,kernel_list=kernel_list,dilated_list=dilated_list,attn=attn)
 
 
-    def forward(self, xDecode, xEncode):
-        xDecode = self.up(xDecode)
+    def forward(self, xDecode, xEncode,inps):
+        xDecode = self.up(xDecode)* self.SA_atten(inps)
 
         # input is CHW
         diffY = xEncode.size()[2] - xDecode.size()[2]
@@ -153,10 +154,10 @@ class SAUnetForProcess(nn.Module):
         self.down3 = SAUnetDown(256, 512,attn = "LSKNet")          # 32
         self.down4 = SAUnetDown(512, 1024,attn = "LSKNet")         # 16
 
-        self.up1 = SAUnetUp(1024, 512,attn = "LSKNet")             # 32
-        self.up2 = SAUnetUp(512, 256,attn = "LSKNet")              # 64
-        self.up3 = SAUnetUp(256, 128,attn = "LSKNet")            # 128
-        self.up4 = SAUnetUp(128, 64,attn = "LSKNet")             # 256
+        self.up1 = SAUnetUp(1024, 512,32,attn = "LSKNet")             # 32
+        self.up2 = SAUnetUp(512, 256,64,attn = "LSKNet")              # 64
+        self.up3 = SAUnetUp(256, 128,128,attn = "LSKNet")            # 128
+        self.up4 = SAUnetUp(128, 64,256,attn = "LSKNet")             # 256
         self.outc = SAUnetOut(64, self.output_channel)
 
     def forward(self,inp):
@@ -166,10 +167,10 @@ class SAUnetForProcess(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        x = self.up1(x5, x4)
-        x = self.up2(x, x3)
-        x = self.up3(x, x2)
-        x = self.up4(x, x1)
+        x = self.up1(x5, x4,inp)
+        x = self.up2(x, x3,inp)
+        x = self.up3(x, x2,inp)
+        x = self.up4(x, x1,inp)
         x = self.outc(x)
         return x
 
@@ -290,4 +291,5 @@ def SAUnetOut_test():
 
 
 if __name__ == '__main__':
-    SAUnetForProcess_test()
+    SANet_test()
+    # SAUnetForProcess_test()
