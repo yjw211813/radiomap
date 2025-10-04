@@ -104,19 +104,19 @@ class SAUnetDown(nn.Module):
         return self.conv (x)
 
 class SAUnetUp(nn.Module):
-    def __init__(self, C_in, C_out,outSize,kernel_list = [3,5], dilated_list = [1,1],attn = "Attn"):
+    def __init__(self, C_in, C_out,kernel_list = [3,5], dilated_list = [1,1],attn = "LSKNet"):
         super(SAUnetUp, self).__init__()
         simple_flag = False
 
         kernel_sizes = [3,5,7]
-        outShape = [C_in // 2,outSize,outSize]
+
         self.up =  nn.ConvTranspose2d(C_in, C_in // 2, kernel_size=2, stride=2)  if simple_flag else multiScaleUpSample(C_in,kernel_sizes,factor=0.5)
-        self.SA_atten = SANet(64 + C_in // 2,outShape,attn = "Identity")
+
         self.conv = resConv(C_in=C_in,C_out=C_out,kernel_list=kernel_list,dilated_list=dilated_list,attn=attn)
 
 
-    def forward(self, xDecode, xEncode,inps):
-        xDecode = self.up(xDecode) * self.SA_atten(inps,xEncode)
+    def forward(self, xDecode, xEncode):
+        xDecode = self.up(xDecode)
 
         # input is CHW
         diffY = xEncode.size()[2] - xDecode.size()[2]
@@ -149,14 +149,14 @@ class SAUnetForProcess(nn.Module):
 
         self.inc = resConv(self.input_channel, 64,attn = "LSKNet")      # 256
         self.down1 = SAUnetDown(64, 128,attn = "LSKNet")           # 128
-        self.down2 = SAUnetDown(128, 256,attn = "Attn")          # 64
-        self.down3 = SAUnetDown(256, 512,attn = "Attn")          # 32
-        self.down4 = SAUnetDown(512, 1024,attn = "Attn")         # 16
+        self.down2 = SAUnetDown(128, 256,attn = "LSKNet")          # 64
+        self.down3 = SAUnetDown(256, 512,attn = "LSKNet")          # 32
+        self.down4 = SAUnetDown(512, 1024,attn = "LSKNet")         # 16
 
-        self.up1 = SAUnetUp(1024, 512,32,attn = "Attn")             # 32
-        self.up2 = SAUnetUp(512, 256,64,attn = "Attn")              # 64
-        self.up3 = SAUnetUp(256, 128,128,attn = "LSKNet")            # 128
-        self.up4 = SAUnetUp(128, 64,256,attn = "LSKNet")             # 256
+        self.up1 = SAUnetUp(1024, 512,attn = "LSKNet")             # 32
+        self.up2 = SAUnetUp(512, 256,attn = "LSKNet")              # 64
+        self.up3 = SAUnetUp(256, 128,attn = "LSKNet")            # 128
+        self.up4 = SAUnetUp(128, 64,attn = "LSKNet")             # 256
         self.outc = SAUnetOut(64, self.output_channel)
 
     def forward(self,inp):
@@ -166,10 +166,10 @@ class SAUnetForProcess(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        x = self.up1(x5, x4,x1)
-        x = self.up2(x, x3,x1)
-        x = self.up3(x, x2,x1)
-        x = self.up4(x, x1,x1)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
         x = self.outc(x)
         return x
 
@@ -189,7 +189,7 @@ def SAUnetForProcess_test():
     output_shape = [C_out, img_H, img_W]
 
     # 测试用例1: 基础配置 (使用Attn)
-    print("\n1. nihaoTesting resConv with Attn (C_in != C_out):")
+    print("\n1. Testing resConv with Attn (C_in != C_out):")
     model = SAUnetForProcess(input_shape = input_shape,output_shape= output_shape).to(device)
 
     get_gpu_info.print_gpu_memory(description = "Conv3x3_DownSample GPU info", x = input_data1,model = model)

@@ -47,13 +47,13 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
 
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/SAUnetAddSANetMinusAtten1/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetAddSANetMinusAtten1/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetAddSANetMinusAtten1/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/SAUnetNoSanet/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetNoSanet/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetNoSanet/"# 模型存储位置
 
     os.makedirs(model_save_dir, exist_ok=True)
 
-    print("SAUnetAddSANetMinusAtten1,cuda = 2")
+    print("SAUnetNoSanet,cuda = 2")
     # 定义模型
 
     input_shape = [6, 256, 256]
@@ -67,5 +67,5 @@ if __name__ == '__main__':
 
     app = Unet_BTM_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
     load_epoch = 0
-    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/SAUnetAddSANetMinusAtten1/"
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/SAUnetNoSanet/"
     app.train(model, train_loader, val_loader, total_epoch)
