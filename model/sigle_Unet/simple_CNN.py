@@ -36,8 +36,10 @@ class resConv(nn.Module):
 
         if attn == "LSKNet":
             self.attn = LSKNet(C_out, kernel_mid = LSK_mid_kernel, kernel_list = LSK_kernels, dilated_list = LSK_dilats)
-        else:
+        elif attn == "Attn":
             self.attn = AttnBlock(C_out)
+        else:
+            self.attn = nn.Identity()
 
 
     def forward(self, x):
@@ -109,7 +111,7 @@ class SAUnetUp(nn.Module):
         kernel_sizes = [3,5,7]
         outShape = [C_in // 2,outSize,outSize]
         self.up =  nn.ConvTranspose2d(C_in, C_in // 2, kernel_size=2, stride=2)  if simple_flag else multiScaleUpSample(C_in,kernel_sizes,factor=0.5)
-        self.SA_atten = SANet(6 + C_in // 2,outShape,attn =attn)
+        self.SA_atten = SANet(64 + C_in // 2,outShape,attn = "Identity")
         self.conv = resConv(C_in=C_in,C_out=C_out,kernel_list=kernel_list,dilated_list=dilated_list,attn=attn)
 
 
@@ -164,10 +166,10 @@ class SAUnetForProcess(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        x = self.up1(x5, x4,inp)
-        x = self.up2(x, x3,inp)
-        x = self.up3(x, x2,inp)
-        x = self.up4(x, x1,inp)
+        x = self.up1(x5, x4,x1)
+        x = self.up2(x, x3,x1)
+        x = self.up3(x, x2,x1)
+        x = self.up4(x, x1,x1)
         x = self.outc(x)
         return x
 
@@ -187,7 +189,7 @@ def SAUnetForProcess_test():
     output_shape = [C_out, img_H, img_W]
 
     # 测试用例1: 基础配置 (使用Attn)
-    print("\n1. Testing resConv with Attn (C_in != C_out):")
+    print("\n1. nihaoTesting resConv with Attn (C_in != C_out):")
     model = SAUnetForProcess(input_shape = input_shape,output_shape= output_shape).to(device)
 
     get_gpu_info.print_gpu_memory(description = "Conv3x3_DownSample GPU info", x = input_data1,model = model)
