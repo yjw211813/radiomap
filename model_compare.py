@@ -16,7 +16,7 @@ from model.rem_gan import modules
 from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
 import numpy as np
 import pandas as pd
-from model.sigle_Unet.SAUnet import Unet_BTM
+from model.sigle_Unet.SAUnet import SAUnet
 
 
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
@@ -82,7 +82,7 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
     plt.close()
 
 
-def model_compare(radioUnet_model, UVM_model, REMGAN_netG, BTM_ghost_UNet_model, compare_dir, test_loader, device):
+def model_compare(radioUnet_model, UVM_model, REMGAN_netG, SAUnet_model, compare_dir, test_loader, device):
     """
     多个模型的对比分析 - 修改版本
     """
@@ -93,7 +93,7 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG, BTM_ghost_UNet_model,
         'RadioUnet': radioUnet_model,
         'UVM': UVM_model,
         'REMGAN': REMGAN_netG,
-        "SAUnet": BTM_ghost_UNet_model,
+        "SAUnet": SAUnet_model,
     }
 
     # 存储每个模型的指标
@@ -141,8 +141,13 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG, BTM_ghost_UNet_model,
             outputs_dict['REMGAN'] = REMGAN_outputs
 
             # SAUnet 输出
-            BTMUNet_outputs = BTM_ghost_UNet_model(inputs)
-            outputs_dict['SAUnet'] = BTMUNet_outputs
+            inputs[:, 2:5, :, :] = inputs[:, 2:5, :, :] / 256
+            targets = targets / 256
+            SAUnet_outputs = SAUnet_model(inputs)
+            SAUnet_outputs = SAUnet_outputs*256
+            inputs[:, 2:5, :, :] = inputs[:, 2:5, :, :] * 256
+            targets = targets * 256
+            outputs_dict['SAUnet'] = SAUnet_outputs
 
             # 为每个模型计算指标
             for model_name, outputs in outputs_dict.items():
@@ -304,7 +309,7 @@ if __name__ == "__main__":
         "num_samples_low": 10,  # 最低采样数
         "num_samples_high": 300,  # 最高采样数
         "inter_flag": True,  # 看是否需要插值图像
-        "scale256_flag": True,  # 取值范围是否为0 - 255
+        "scale256_flag": False,  # 取值范围是否为0 - 255
         "sample_flag": True,  # 是否有采样输入
         "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
         "formula_flag": True
@@ -369,11 +374,11 @@ if __name__ == "__main__":
 
     BTM_ghost_UNet_input_shape = [6, 256, 256]
     BTM_ghost_UNet_output_shape = [1, 256, 256]
-    C_down_list =  [32, 64, 128, 256]
-    C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
+    C_down_list =  [64, 128, 256, 512]
+    C_list_attn = torch.tensor([64, 64, 128, 128, 256])
     attn_params = [C_list_attn * 2, C_list_attn , C_list_attn // 2, C_list_attn // 2]
-    SAUNet_model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params)
-    load_epoch = 22
+    SAUNet_model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params)
+    load_epoch = 8
     BTM_ghost_UNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/BTM_Unet_1/"
 
     BTM_ghost_UNet_checkpoint_path = os.path.join(BTM_ghost_UNet_save_dir, f"checkpoint_epoch_{load_epoch}.pth")

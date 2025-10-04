@@ -55,7 +55,7 @@ simuSetDict = {
     "num_samples_low": 10,  # 最低采样数
     "num_samples_high": 300,  # 最高采样数
     "inter_flag": True,  # 看是否需要插值图像
-    "scale256_flag": True,  # 取值范围是否为0 - 255
+    "scale256_flag": False,  # 取值范围是否为0 - 255
     "sample_flag": True,  # 是否有采样输入
     "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
     "formula_flag": True

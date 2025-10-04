@@ -206,7 +206,7 @@ class multiScaleConvDown(nn.Module):
                 nn.Conv2d(C, C, kernel_size=k, stride=2, padding=padding)
             )
 
-    def forward(self, x, temb=None, cemb=None):
+    def forward(self, x):
         out = None
         for conv in self.conv_list:
             if out is None:
@@ -355,7 +355,7 @@ class multiScaleUpSample(nn.Module):
         # Single convolution layer after combining outputs
         self.conv = nn.Conv2d(int(C_in* factor), int(C_in* factor), 3, stride=1, padding=1)
 
-    def forward(self, x, temb=None, cemb=None):
+    def forward(self, x):
         out = None
         for t_up in self.t_ups:
             if out is None:
@@ -375,4 +375,4 @@ def multiScaleUpSample_test():
     print(f"Output shape: {output_tensor.shape}")
 
 if __name__ == "__main__":
-    ConvTranspose_test()
+    multiScaleUpSample_test()

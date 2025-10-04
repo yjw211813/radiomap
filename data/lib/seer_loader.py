@@ -48,7 +48,6 @@ class RadioMapSeerLoader(Dataset):
         self.loss_samples_flag = False  # 是否定义loss为稀疏采样loss
         self.formula_flag = False
 
-        self.scale256_flag = False
         # 将设置字典中的参数转为类属性
         for key, value in simuSetDict.items():
             setattr(self, key, value)

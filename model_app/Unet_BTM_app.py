@@ -39,9 +39,13 @@ class Unet_BTM_app():
                 inputs, targets = data
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
-
+                inputs[:,2:5,:,:] =  inputs[:,2:5,:,:]/256
+                targets = targets / 256
                 # Forward pass
                 outputs = model(inputs)
+
+                outputs = outputs * 256
+                targets = targets * 256
 
                 # 获取当前batch的样本数
                 batch_size = inputs.size(0)
@@ -141,8 +145,15 @@ class Unet_BTM_app():
             for inputs, targets in train_loader_with_progress:
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
+                inputs[:,2:5,:,:] =  inputs[:,2:5,:,:]/256
+                targets = targets / 256
 
                 outputs = model(inputs)
+                outputs = outputs * 256
+                targets = targets * 256
+
+
+
                 loss = criterion(outputs, targets)
 
                 running_loss += loss.item() / inputs.shape[0]
