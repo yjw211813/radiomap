@@ -14,6 +14,56 @@ from tqdm import tqdm
 import torchvision
 
 
+def preprocess_data(inputs, targets,device, norm_type='minmax'):
+    """
+    预处理输入数据和目标数据
+
+    Args:
+        inputs: 输入张量 [batch, channels, height, width]
+        targets: 目标张量
+        norm_type: 归一化类型，'minmax' 或 'norm'
+        device: 设备类型
+
+    Returns:
+        处理后的inputs和targets
+    """
+    with torch.no_grad():
+        # 移动到设备
+        inputs = inputs.to(device)
+        targets = targets.to(device)
+
+        # 对第2-4通道进行初步缩放（假设这些通道是图像通道）
+        inputs[:, 2:5, :, :] = inputs[:, 2:5, :, :] / 256.0
+
+
+        if norm_type == 'minmax':
+            channel_data = inputs[:, 3, :, :]
+            min_val = channel_data.min()
+            max_val = channel_data.max()
+            # 避免除零
+            if (max_val - min_val) < 1e-8:
+                inputs[:, 3, :, :] = torch.zeros_like(channel_data)
+            else:
+                inputs[:, 3, :, :] = (channel_data - min_val) / (max_val - min_val)
+
+        elif norm_type == 'norm':
+
+            channel_data = inputs[:, 3, :, :]
+            mean_val = channel_data.mean()
+            std_val = channel_data.std()
+            # 避免除零
+            if std_val < 1e-8:
+                inputs[:, 3, :, :] = torch.zeros_like(channel_data)
+            else:
+                inputs[:, 3, :, :] = (channel_data - mean_val) / std_val
+
+        # 目标数据归一化
+        targets = targets / 256.0
+
+        return inputs, targets
+
+
+
 class Unet_BTM_app():
     def __init__(self, start_epoch, log_dir, warmup_epochs, model_save_dir,device):
 
@@ -37,10 +87,7 @@ class Unet_BTM_app():
                     break
 
                 inputs, targets = data
-                inputs = inputs.to(self.device)
-                targets = targets.to(self.device)
-                inputs[:,2:5,:,:] =  inputs[:,2:5,:,:]/256
-                targets = targets / 256
+                inputs, targets = preprocess_data(inputs, targets, self.device)
                 # Forward pass
                 outputs = model(inputs)
 
