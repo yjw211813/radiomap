@@ -1,5 +1,5 @@
 import torch
-from model_app.Unet_BTM_app import Unet_BTM_app
+from model_app.SAUnet_app import Unet_BTM_app
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.sigle_Unet.simple_CNN import SAUnetForProcess

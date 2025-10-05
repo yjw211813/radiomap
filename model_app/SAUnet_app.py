@@ -14,7 +14,7 @@ from tqdm import tqdm
 import torchvision
 
 
-def preprocess_data(inputs, targets,device, norm_type='minmax'):
+def preprocess_data(inputs,device, norm_type='minmax'):
     """
     预处理输入数据和目标数据
 
@@ -30,7 +30,6 @@ def preprocess_data(inputs, targets,device, norm_type='minmax'):
     with torch.no_grad():
         # 移动到设备
         inputs = inputs.to(device)
-        targets = targets.to(device)
 
         # 对第2-4通道进行初步缩放（假设这些通道是图像通道）
         inputs[:, 2:5, :, :] = inputs[:, 2:5, :, :] / 256.0
@@ -57,14 +56,13 @@ def preprocess_data(inputs, targets,device, norm_type='minmax'):
             else:
                 inputs[:, 3, :, :] = (channel_data - mean_val) / std_val
 
-        # 目标数据归一化
-        targets = targets / 256.0
-
-        return inputs, targets
 
 
+        return inputs
 
-class Unet_BTM_app():
+
+
+class SAUnet_app():
     def __init__(self, start_epoch, log_dir, warmup_epochs, model_save_dir,device):
 
         self.start_epoch = start_epoch
@@ -87,12 +85,10 @@ class Unet_BTM_app():
                     break
 
                 inputs, targets = data
-                inputs, targets = preprocess_data(inputs, targets, self.device)
+                inputs = preprocess_data(inputs, self.device)
                 # Forward pass
                 outputs = model(inputs)
-
                 outputs = outputs * 256
-                targets = targets * 256
 
                 # 获取当前batch的样本数
                 batch_size = inputs.size(0)
@@ -190,16 +186,11 @@ class Unet_BTM_app():
             )
 
             for inputs, targets in train_loader_with_progress:
-                inputs = inputs.to(self.device)
+                inputs = preprocess_data(inputs, self.device)
                 targets = targets.to(self.device)
-                inputs[:,2:5,:,:] =  inputs[:,2:5,:,:]/256
-                targets = targets / 256
 
                 outputs = model(inputs)
                 outputs = outputs * 256
-                targets = targets * 256
-
-
 
                 loss = criterion(outputs, targets)
 

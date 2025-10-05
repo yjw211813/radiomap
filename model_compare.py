@@ -1,5 +1,5 @@
 import torch
-from model_app.Unet_BTM_app import Unet_BTM_app
+from model_app.SAUnet_app import Unet_BTM_app
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.UVM.UVM_model import UVMNet
@@ -17,7 +17,7 @@ from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
 import numpy as np
 import pandas as pd
 from model.sigle_Unet.simple_CNN import SAUnetForProcess
-from model_app.Unet_BTM_app import preprocess_data
+from model_app.SAUnet_app import preprocess_data
 
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
     """
@@ -141,7 +141,7 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG, SAUnet_model, compare
             outputs_dict['REMGAN'] = REMGAN_outputs
 
             # SAUnet 输出
-            inputs, _ = preprocess_data(inputs, targets, device)
+            inputs = preprocess_data(inputs, device)
             SAUnet_outputs = SAUnet_model(inputs)
 
             outputs_dict['SAUnet'] = SAUnet_outputs * 256

@@ -1,8 +1,8 @@
 import torch
-from model_app.Unet_BTM_app import Unet_BTM_app
+from model_app.SAUnet_app import SAUnet_app
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
-from model.sigle_Unet.SAUnet import Unet_BTM
+from model.sigle_Unet.SAUnet import SAUnet
 import os
 
 
@@ -61,14 +61,14 @@ if __name__ == '__main__':
     C_down_list = [32, 64, 128, 256]
     C_list_attn = torch.tensor([64, 64, 64, 128, 128, 128, 128])
     attn_params = [C_list_attn * 2, C_list_attn, C_list_attn // 2, C_list_attn // 2]
-    model = Unet_BTM(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape, C_down_list, attn_params)
+    model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape, C_down_list, attn_params)
 
     # 定义训练对象
     warmup_epochs = 4
     total_epoch = 80
     start_epoch = 0
 
-    app = Unet_BTM_app(start_epoch, log_dir, warmup_epochs, model_save_dir, device)
+    app = SAUnet_app(start_epoch, log_dir, warmup_epochs, model_save_dir, device)
     load_epoch = 36
     val_dir = r"/home/code/radio_map_construction/runs/model_val_log/MS_no_cars256/"
     # app.train(model, train_loader, val_loader, total_epoch)
