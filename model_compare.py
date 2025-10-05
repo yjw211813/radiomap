@@ -324,11 +324,11 @@ if __name__ == "__main__":
     compare_dir = r"/home/code/radio_map_construction/runs/model_val_log/compare/"
 
     input_channels = 6
-    WNetPhase = "firstU"
+    WNetPhase = "secondU"
     radioUnet_model = RadioWNet(inputs=input_channels, phase=WNetPhase)
     radioUnet_model.to(device)
     radioUnet_model.eval()
-    radioUnet_load_epoch = 35
+    radioUnet_load_epoch = 96
     radioUnet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/RadioUnet/"  # 模型存储位置
     radioUnet_checkpoint_path = os.path.join(radioUnet_save_dir,
                                              f"checkpoint_{WNetPhase}_epoch_{radioUnet_load_epoch}.pth")
@@ -340,7 +340,7 @@ if __name__ == "__main__":
     UVM_model = UVMNet(n_channels=input_channels)
     UVM_model.to(device)
     UVM_model.eval()
-    UVM_load_epoch = 33
+    UVM_load_epoch = 20
     UVM_save_dir = r"/home/code/radio_map_construction/runs/model_pth/UVM/"
     UVM_checkpoint_path = os.path.join(UVM_save_dir, f"checkpoint_epoch_{UVM_load_epoch}.pth")
     UVM_checkpoint = torch.load(UVM_checkpoint_path, weights_only=True, map_location=device)
@@ -350,7 +350,7 @@ if __name__ == "__main__":
 
     REMGAN_netG = modules.RadioWNet(inputs=input_channels, phase="firstU")
     REMGAN_netD = Discriminator()
-    REMGAN_load_epoch = 21
+    REMGAN_load_epoch = 150
     REMGAN_netG.to(device)
     REMGAN_netD.to(device)
     REMGAN_save_dir = r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
