@@ -2,11 +2,11 @@ import torch
 from model_app.SAUnet_app import SAUnet_app
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
-from model.sigle_Unet.simple_CNN import SAUnetForProcess
+from model.sigle_Unet.SAUnetNoMultiScale import SAUnet
 import os
 
 if __name__ == '__main__':
-    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
     train_batch_size = 16  # 批次大小
     val_batch_size = 16
@@ -47,18 +47,21 @@ if __name__ == '__main__':
     val_loader = dataloaders['val']
     test_loader = dataloaders['test']
 
-    log_dir = r'/home/code/radio_map_construction/runs/model_log/SAUnetNoSanet/'# log 存储位置
-    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetNoSanet/"# 模型加载目录
-    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetNoSanet/"# 模型存储位置
+    log_dir = r'/home/code/radio_map_construction/runs/model_log/old_SAUnetNoMultiScale/'# log 存储位置
+    model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/old_SAUnetNoMultiScale/"# 模型加载目录
+    model_save_dir = r"/home/code/radio_map_construction/runs/model_pth/old_SAUnetNoMultiScale/"# 模型存储位置
 
     os.makedirs(model_save_dir, exist_ok=True)
 
-    print("SAUnetNoSanet,cuda = 2")
+    print("old_SAUnetNoMultiScale,cuda = 3")
     # 定义模型
 
-    input_shape = [6, 256, 256]
-    output_shape = [1, 256, 256]
-    model = SAUnetForProcess(input_shape = input_shape,output_shape= output_shape)
+    BTM_ghost_UNet_input_shape = [6, 256, 256]
+    BTM_ghost_UNet_output_shape = [1, 256, 256]
+    C_down_list = [64, 128, 256, 512]
+    C_list_attn = torch.tensor([64, 64, 128, 128, 256])
+    attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
+    model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params)
 
     # 定义训练对象
     warmup_epochs = 5
@@ -67,5 +70,5 @@ if __name__ == '__main__':
 
     app = SAUnet_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
     load_epoch = 0
-    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/SAUnetNoSanet/"
+    val_dir = r"/home/code/radio_map_construction/runs/model_val_log/old_SAUnetNoMultiScale/"
     app.train(model, train_loader, val_loader, total_epoch)
