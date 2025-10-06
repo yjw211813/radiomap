@@ -1,5 +1,5 @@
 import torch
-from model_app.SAUnet_app import Unet_BTM_app
+from model_app.SAUnet_app import SAUnet_app
 from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 from model.UVM.UVM_model import UVMNet
@@ -17,12 +17,15 @@ from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
 import numpy as np
 import pandas as pd
 from model.sigle_Unet.simple_CNN import SAUnetForProcess
+from model.sigle_Unet.SAUnet import SAUnet
 from model_app.SAUnet_app import preprocess_data
+
 
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
     """
     创建多个模型的对比图像 - 修改版本
     每个PNG只显示4个targets，targets放在最右边
+    保证所有样本的热力图尺度和颜色映射保持一致
     """
     # 转换为numpy数组
     if torch.is_tensor(targets):
@@ -45,6 +48,16 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
 
     num_models = len(processed_outputs_dict) + 1  # +1 for targets
 
+    # 计算全局最小值和最大值，确保所有图像使用相同的颜色映射范围
+    all_data = []
+    for outputs in processed_outputs_dict.values():
+        all_data.append(outputs)
+    all_data.append(targets)
+
+    # 计算全局范围
+    global_min = min(np.min(data) for data in all_data)
+    global_max = max(np.max(data) for data in all_data)
+
     # 创建一个大图像，包含所有模型和目标的对比
     # 布局：行数为样本数，列数为模型数，targets放在最右边
     fig, axes = plt.subplots(num_samples, num_models, figsize=(4 * num_models, 4 * num_samples))
@@ -62,7 +75,8 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
             output_img = processed_outputs_dict[model_name][i]
 
             ax = axes[i, j] if num_samples > 1 else axes[j]
-            im = ax.imshow(output_img, cmap='jet')
+            # 使用全局最小值和最大值确保颜色映射一致
+            im = ax.imshow(output_img, cmap='jet', vmin=global_min, vmax=global_max)
 
             # 特殊处理BTMUNet标题
             if model_name == 'SAUnet':
@@ -73,14 +87,14 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
 
         # 最后显示target（最右边）
         ax = axes[i, num_models - 1] if num_samples > 1 else axes[num_models - 1]
-        im = ax.imshow(targets[i], cmap='jet')
+        # 使用相同的颜色映射范围
+        im = ax.imshow(targets[i], cmap='jet', vmin=global_min, vmax=global_max)
         ax.set_title(f"Target")
         ax.axis('off')
 
     plt.tight_layout()
     plt.savefig(os.path.join(compare_dir, f"batch_{batch_idx}_model_comparison.png"), dpi=300, bbox_inches='tight')
     plt.close()
-
 
 def model_compare(radioUnet_model, UVM_model, REMGAN_netG, SAUnet_model, compare_dir, test_loader, device):
     """
@@ -369,11 +383,14 @@ if __name__ == "__main__":
     REMGAN_netG.eval()
     REMGAN_netD.eval()
 
-    input_shape = [6, 256, 256]
-    output_shape = [1, 256, 256]
-    SAUNet_model = SAUnetForProcess(input_shape = input_shape,output_shape= output_shape)
-    load_epoch = 19
-    SAUNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetNoSanet/"
+    BTM_ghost_UNet_input_shape = [6, 256, 256]
+    BTM_ghost_UNet_output_shape = [1, 256, 256]
+    C_down_list = [64, 128, 256, 512]
+    C_list_attn = torch.tensor([64, 64, 128, 128, 256])
+    attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
+    SAUNet_model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params)
+    load_epoch = 24
+    SAUNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/old_SAUnet_deeper/"
 
     SAUNet_checkpoint_path = os.path.join(SAUNet_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
     SAUNet_checkpoint = torch.load(SAUNet_checkpoint_path, weights_only=True, map_location=device)
