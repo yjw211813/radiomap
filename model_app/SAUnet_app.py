@@ -85,6 +85,7 @@ class SAUnet_app():
                     break
 
                 inputs, targets = data
+                targets = targets.to(self.device)
                 inputs = preprocess_data(inputs, self.device)
                 # Forward pass
                 outputs = model(inputs)
@@ -131,7 +132,7 @@ class SAUnet_app():
         writer.add_scalar('PSNR/val', avg_psnr, epoch)
 
     def train(self, model, train_loader, val_loader, total_epoch, save_interval=1):
-        print("修正学习率")
+        print("修正验证代码")
 
         model.to(self.device)
         eval_interval = 1

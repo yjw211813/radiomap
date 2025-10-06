@@ -28,9 +28,9 @@ class BTM_Net(nn.Module):
         C_list = torch.cat((C_list, torch.tensor([self.output_channel], dtype=torch.int32)))
         # 构建编码器
         layers = []
-        layers.append(inception_ghost_sum(C_in=self.input_channel, C_out=C_list[0], kernel_list=[3, 5, 7, 9], dilated_list=[1,1,1,1]))
+        layers.append(inception_ghost_sum(C_in=self.input_channel, C_out=C_list[0], kernel_list=[3, 5, 7], dilated_list=[1,1,1]))
         for i in range(len(C_list) - 1):
-            layers.append(inception_ghost_sum(C_in=C_list[i], C_out=C_list[i + 1], kernel_list=[3, 5, 7, 9],  dilated_list=[1,1,1,1]))
+            layers.append(inception_ghost_sum(C_in=C_list[i], C_out=C_list[i + 1], kernel_list=[3, 5, 7],  dilated_list=[1,1,1]))
         self.encoder = nn.Sequential(*layers)
         self.gelu = nn.GELU()
 
@@ -48,19 +48,20 @@ class SAUnet(nn.Module):
         super(SAUnet, self).__init__()
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
-        kernel_sizes = [3, 5, 7, 9]
+        kernel_sizes = [3, 5]
         # 创建下采样路径（编码器）
         self.encoder = nn.ModuleList()
         in_ch = self.input_channel
         for out_ch in C_down_list:
             self.encoder.append(nn.Sequential(
-                inception_ghost_sum(C_in=in_ch, C_out=out_ch,  kernel_list=kernel_sizes, dilated_list=[1,1,1,1]),
+                inception_ghost_sum(C_in=in_ch, C_out=out_ch,  kernel_list=kernel_sizes, dilated_list=[1,1]),
+                inception_ghost_sum(C_in=out_ch, C_out=out_ch, kernel_list=kernel_sizes, dilated_list=[1, 1]),
                 multiScaleConvDown(out_ch,kernel_sizes)
             ))
             in_ch = out_ch
 
         # 中心卷积层
-        self.conv_center = fractal_conv(C_in=C_down_list[-1],C_out=C_down_list[-1],kernel_list = kernel_sizes,dilated_list = [1,1,1,1],inception_module = inception_sum)
+        self.conv_center = fractal_conv(C_in=C_down_list[-1],C_out=C_down_list[-1],kernel_list = kernel_sizes,dilated_list = [1,1],inception_module = inception_sum)
 
         # 创建上采样路径（解码器）
         self.decodes = nn.ModuleList()
@@ -68,7 +69,8 @@ class SAUnet(nn.Module):
             i = i -1
             self.decodes.append(
                 nn.Sequential(
-                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i], kernel_list=kernel_sizes, dilated_list=[1,1,1,1]),
+                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i] + C_down_list[i], kernel_list=kernel_sizes, dilated_list=[1,1]),
+                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i], C_out=C_down_list[i],kernel_list=kernel_sizes, dilated_list=[1, 1]),
                     multiScaleUpSample(C_down_list[i],kernel_sizes,factor=0.5)
                 )
             )
