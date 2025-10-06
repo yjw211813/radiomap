@@ -364,7 +364,7 @@ if __name__ == "__main__":
 
     REMGAN_netG = modules.RadioWNet(inputs=input_channels, phase="firstU")
     REMGAN_netD = Discriminator()
-    REMGAN_load_epoch = 150
+    REMGAN_load_epoch = 180
     REMGAN_netG.to(device)
     REMGAN_netD.to(device)
     REMGAN_save_dir = r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
@@ -383,14 +383,11 @@ if __name__ == "__main__":
     REMGAN_netG.eval()
     REMGAN_netD.eval()
 
-    BTM_ghost_UNet_input_shape = [6, 256, 256]
-    BTM_ghost_UNet_output_shape = [1, 256, 256]
-    C_down_list = [64, 128, 256, 512]
-    C_list_attn = torch.tensor([64, 64, 128, 128, 256])
-    attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-    SAUNet_model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params)
-    load_epoch = 24
-    SAUNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/old_SAUnet_deeper/"
+    input_shape = [6, 256, 256]
+    output_shape = [1, 256, 256]
+    SAUNet_model = SAUnetForProcess(input_shape = input_shape,output_shape= output_shape)
+    load_epoch = 63
+    SAUNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetNoSanet/"
 
     SAUNet_checkpoint_path = os.path.join(SAUNet_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
     SAUNet_checkpoint = torch.load(SAUNet_checkpoint_path, weights_only=True, map_location=device)
