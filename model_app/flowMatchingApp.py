@@ -170,8 +170,9 @@ class flowMatching_app():
             # 遍历整个验证集
             for batch_idx, (inputs, targets) in enumerate(tqdm(val_loader, desc="Validating")):
                 if batch_idx<3:
-                    x_0 = inputs[:, 3, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
+                    x_0 = inputs[:, -2, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
                     condition_info = inputs.to(self.device)
+
                     targets = targets.to(self.device)
 
                     # 使用ODE求解器获取解
@@ -246,14 +247,14 @@ class flowMatching_app():
 
         model.to(self.device)
         # 定义优化器
-        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-4)
+        optimizer = torch.optim.Adam(model.parameters(), lr = 5e-5)
         cosineScheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer,
                                                                T_max=total_epoch,
                                                                eta_min=0,
                                                                last_epoch=-1)
         warmUpScheduler = GradualWarmupScheduler(optimizer=optimizer,
                                                  multiplier=1,               # 热身阶段最终会将学习率提高到初始值的2.5倍   1e-3 * multiplier
-                                                 warm_epoch=total_epoch // 20, # 热身阶段占5%的总epoch
+                                                 warm_epoch=total_epoch // 25, # 热身阶段占5%的总epoch
                                                  after_scheduler=cosineScheduler)
         # 定义采样轨迹 仿射概率路径 X_t = α_t * X_1 + σ_t * X_0 ， CondOTScheduler 是一个具体的调度器实现，它定义了线性插值路径
         path = AffineProbPath(scheduler=CondOTScheduler())
@@ -279,7 +280,7 @@ class flowMatching_app():
                 for inputs, targets in tqdmDataLoader:
                     optimizer.zero_grad()
 
-                    x_0 = inputs[:, 3, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
+                    x_0 = inputs[:, -2, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
                     x_1 = targets.to(self.device)
                     condition_info = inputs.to(self.device)
                     t = torch.rand(x_1.shape[0]).to(self.device)
@@ -345,7 +346,7 @@ class flowMatching_app():
             # 遍历整个验证集
             for batch_idx, (inputs, targets) in enumerate(tqdm(test_loader, desc="Validating")):
                 if batch_idx<3:
-                    x_0 = inputs[:, 3, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
+                    x_0 = inputs[:, -2, :, :].unsqueeze(1).to(self.device)# 将插值图像取出
                     condition_info = inputs.to(self.device)
                     targets = targets.to(self.device)
 

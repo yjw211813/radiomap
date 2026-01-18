@@ -224,7 +224,7 @@ class LSKNet(nn.Module):
 # 输入 x = [B, C_in, H, W] temb = [B, 1, H, W]
 # 输出 out = [B, C_out, H, W]
 class ResConv(nn.Module):
-    def __init__(self, C_in, C_out, conv_kernels,conv_dilats,drop_out=0.05, attn="Attn", LSK_kernels = [5,7,5,5], LSK_dilats = [1,3,3,3], LSK_mid_kernel = 7):
+    def __init__(self, C_in, C_out, conv_kernels,conv_dilats,drop_out=0, attn="Attn", LSK_kernels = [5,7], LSK_dilats = [1,1], LSK_mid_kernel = 7):
         super().__init__()
         self.conv_begin = inception_ghost_sum(C_in, C_out, conv_kernels, conv_dilats, drop_out)
         self.conv_end = inception_ghost_sum(C_out, C_out, conv_kernels, conv_dilats, drop_out)
@@ -463,19 +463,19 @@ def velocity_UNet_test():
         "in_shape": [batch_size, 6, img_H, img_W],
         "out_shape": [batch_size, 1, img_H, img_W],
         "C_list": [64, 128, 256, 512],
-        "attn_list": ["LSKNet", "LSKNet", "Attn", "Attn"],
-        "conv_kernels": [3, 5, 7, 9],
-        "conv_dilats": [1, 1, 1, 1],
-        "LSK_kernels": [5, 7, 5, 5],
-        "LSK_dilats": [1, 3, 1, 1],
+        "attn_list": ["LSKNet", "LSKNet", "LSKNet", "LSKNet"],
+        "conv_kernels": [3, 5],
+        "conv_dilats": [1, 1],
+        "LSK_kernels": [5, 7],
+        "LSK_dilats": [1, 1],
         "LSK_mid_kernel": 7,
-        "encoderDownKernels": [3, 5, 7,9],
-        "fra_kernels": [3, 5, 7,9],
-        "fra_dilates": [1, 1, 1,1],
+        "encoderDownKernels": [3, 5],
+        "fra_kernels": [3, 5],
+        "fra_dilates": [1, 1],
         "MSAA_pool_kernel": 7,
         "MSAA_kernels": [3, 5, 7,9],
         "MSAA_dilats": [1, 1, 1,1],
-        "decoderUpKernels": [3, 5, 7,9],
+        "decoderUpKernels": [3, 5],
         "tdim": int(512*4),
         "tail_kernel": 5
     }

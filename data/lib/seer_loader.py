@@ -20,6 +20,26 @@ from scipy.optimize import curve_fit
 # dir_antenna= ,
 
 # 调试目录
+'''
+flag设置和返回的值说明
+
+| flag组合（sample_flag / formula_flag / inter_flag / carsInput） | inputs 包含的内容（按顺序，简称对应原始数据） |
+|------------------------------------|------------------------------------------------|
+| False / - / - / "no"               | 【building（image_buildings）, source_tx（image_Tx）】 |
+| False / - / - / ≠"no"              | 【building, source_tx, car_img（image_cars）】 |
+| True / False / False / "no"        | 【building, source_tx, sample（input_samples）】 |
+| True / False / False / ≠"no"       | 【building, source_tx, sample, car_img】 |
+| True / True / False / "no"         | 【building, source_tx, sample, fomula_img（genImg）】 |
+| True / True / False / ≠"no"        | 【building, source_tx, sample, fomula_img, car_img】 |
+| True / False / True / "no"          | 【building, source_tx, sample, inter_img（interpolate_data）】 |
+| True / False / True / ≠"no"         | 【building, source_tx, sample, inter_img, car_img】 |
+| True / True / True / "no"           | 【building, source_tx, sample, fomula_img, inter_img】 |
+| True / True / True / ≠"no"          | 【building, source_tx, sample, fomula_img, inter_img, car_img】（示例对应场景） |
+
+
+'''
+
+
 
 class RadioMapSeerLoader(Dataset):
     def __init__(self,

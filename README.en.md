@@ -70,6 +70,10 @@ sudo usermod -aG sudo liaozhengyan
 然后使用pinns进行embedding
 利用fft来辅助构造loss函数
 
+git clone --mirror 
+git clone --mirror + git push --mirror
+cd 原仓库名.git
+git push --mirror 
 
 
 docker run --shm-size=64g --gpus all -d --name liaozhengyan_GPU -v ~/data:/home/data -v ~/code:/home/code -p 32956:22 liaozhengyan_gpu:latestV2
