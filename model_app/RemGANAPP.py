@@ -16,7 +16,6 @@ import torch
 
 import numpy as np
 import math
-from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
 
 from torch.optim import lr_scheduler
@@ -173,9 +172,9 @@ class REM_GAN_app():
         self.train_batch_size  = model_app_dict['train_batch_size']
         self.val_batch_size = model_app_dict['val_batch_size']
         self.test_batch_size = model_app_dict['test_batch_size']
-        self.train_loader = DataLoader(dataSetDict['trainset'], batch_size=dataSetDict['train_batch_size'], shuffle=False, num_workers=2)
-        self.val_loader = DataLoader(dataSetDict['valset'], batch_size=dataSetDict['val_batch_size'], shuffle=False, num_workers=2)
-        self.test_loader = DataLoader(dataSetDict['testset'], batch_size=dataSetDict['test_batch_size'], shuffle=False, num_workers=2)
+        self.train_loader = dataSetDict['train_loader']
+        self.val_loader = dataSetDict['val_loader']
+        self.test_loader = dataSetDict['test_loader']
 
         # 初始化训练记录
         self.lossD_list = []
