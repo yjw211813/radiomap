@@ -1,6 +1,5 @@
 import torch
 from model_app.SAUnet_app import SAUnet_app
-from data.lib.seer_loader import RadioMapSeerLoader
 from model_train.data_config import get_cars_load
 from model.sigle_Unet.SAUnet import SAUnet
 import os
@@ -9,7 +8,7 @@ if __name__ == '__main__':
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
 
-    train_loader, val_loader, test_loader =get_cars_load()
+    get_cars_load()
 
     log_dir = r'/home/code/radio_map_construction/runs/model_log/old_SAUnet/'# log 存储位置
     model_load_dir = r"/home/code/radio_map_construction/runs/model_pth/old_SAUnet/"# 模型加载目录

@@ -1,7 +1,5 @@
 import torch
-from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
-from data.lib.seer_loader import RadioMapSeerLoader
-from torch.utils.data import Dataset, DataLoader
+from model.rem_gan.EncoderModels import Discriminator
 import os
 from model.rem_gan import modules
 from model_app.RemGANAPP import REM_GAN_app

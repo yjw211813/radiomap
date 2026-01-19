@@ -1,7 +1,5 @@
 from model_app.radioUnetAPP import RadioWNet_app
 import torch
-from data.lib.seer_loader import RadioMapSeerLoader
-from torch.utils.data import DataLoader
 import os
 from model.radioUnet.RadioUnetModel import RadioWNet
 from model_train.data_config import get_nocars_load

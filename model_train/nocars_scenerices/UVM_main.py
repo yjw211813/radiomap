@@ -1,7 +1,5 @@
 import torch
 from model_app.UVM_app import UVM_app
-from data.lib.seer_loader import RadioMapSeerLoader
-from torch.utils.data import DataLoader
 from model.UVM.UVM_model import UVMNet
 import os
 
