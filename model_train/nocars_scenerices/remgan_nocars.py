@@ -3,7 +3,7 @@ from model.rem_gan.EncoderModels import Discriminator
 import os
 from model.rem_gan import modules
 from model_app.RemGANAPP import REM_GAN_app
-from model_train.data_config import get_nocars_load, train_batch_size, val_batch_size, test_batch_size
+from model_train.data_config import get_cars_load, train_batch_size, val_batch_size, test_batch_size
 
 
 if __name__ == '__main__':
@@ -14,7 +14,7 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     base_dir = r"/home/code/radioMap/runs/"
 
-    train_loader, val_loader, test_loader = get_nocars_load()
+    train_loader, val_loader, test_loader =  get_cars_load()
 
     log_dir = base_dir + r'model_log/REM_GAN/'
     model_load_dir = base_dir + r"model_pth/REM_GAN/"

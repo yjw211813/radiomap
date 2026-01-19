@@ -2,12 +2,12 @@ import torch
 from model_app.SAUnet_app import SAUnet_app
 from model.sigle_Unet.SAUnet_Ablation import SAUnetAblation
 import os
-from model_train.data_config import get_nocars_load
+from model_train.data_config import get_cars_load
 
 if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
-    train_loader, val_loader, test_loader = get_nocars_load()
+    train_loader, val_loader, test_loader =  get_cars_load()
     base_dir = r"/home/code/radioMap/runs/"
     log_dir = base_dir + r'model_log/old_SAUnet_ablation/'# log 存储位置
     model_load_dir = base_dir + r"model_pth/old_SAUnet_ablation/"# 模型加载目录

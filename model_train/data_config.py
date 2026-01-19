@@ -7,6 +7,10 @@ val_batch_size = 8
 test_batch_size = 8  # 批次大小1
 
 def get_cars_load():
+    sample_rate_max = 0.03
+    sample_rate_min = 0.005
+    num_samples_high = int(256 * 256 * sample_rate_max)
+    num_samples_low = int(256 * 256 * sample_rate_min)
 
     simuSetDict = {
         "ind1": 0,  # 起始索引
@@ -20,9 +24,9 @@ def get_cars_load():
         "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
         "cityMap": "complete",  # 是否输入完全的城市地图
         "missing": 1,  # 地图缺失号码
-        "fix_samples": 655,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
-        "num_samples_low": 10,  # 最低采样数
-        "num_samples_high": 300,  # 最高采样数
+        "fix_samples": 0,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
+        "num_samples_low": num_samples_low,  # 最低采样数
+        "num_samples_high": num_samples_high,  # 最高采样数
         "inter_flag": True,  # 看是否需要插值图像
         "scale256_flag": True,  # 取值范围是否为0 - 255
         "sample_flag": True,  # 是否有采样输入

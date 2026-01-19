@@ -2,13 +2,14 @@ from model_app.radioUnetAPP import RadioWNet_app
 import torch
 import os
 from model.radioUnet.RadioUnetModel import RadioWNet
-from model_train.data_config import get_nocars_load
+from model_train.data_config import get_cars_load
+
 if __name__ == '__main__':
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
     base_dir = r"/home/code/radioMap/runs/"
 
-    train_loader, val_loader, test_loader = get_nocars_load()
+    train_loader, val_loader, test_loader = get_cars_load()
 
 
     log_dir = base_dir + r'model_log/RadioUnet/'  # log 存储位置
