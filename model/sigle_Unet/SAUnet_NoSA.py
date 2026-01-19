@@ -18,10 +18,10 @@ class Swish(nn.Module):
         return x * torch.sigmoid(x)
 # 变换到相同形状进行加和形式
 
-class SAUnetAblation(nn.Module):
+class SAUnetNoSA(nn.Module):
     # 修改上卷积方法
     def __init__(self, input_shape, output_shape, C_down_list):
-        super(SAUnetAblation, self).__init__()
+        super(SAUnetNoSA, self).__init__()
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
         kernel_sizes = [3, 5]
@@ -104,7 +104,7 @@ def SAUnet_test():
     BTM_ghost_UNet_input_shape = [input_data.shape[1], input_data.shape[2], input_data.shape[3]]
     BTM_ghost_UNet_output_shape = [1, input_data.shape[2], input_data.shape[3]]
     C_down_list = [64, 128, 256, 512]
-    model = SAUnetAblation(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list).to(device)
+    model = SAUnetNoSA(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list).to(device)
     x = input_data
     get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info", x, model)
 

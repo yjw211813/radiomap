@@ -42,10 +42,10 @@ class BTM_Net(nn.Module):
         return out_map
 
 
-class SAUnet(nn.Module):
+class SAUnetNoMultiScale(nn.Module):
     # 修改上卷积方法
     def __init__(self, input_shape, output_shape, C_down_list,attn_params):
-        super(SAUnet, self).__init__()
+        super(SAUnetNoMultiScale, self).__init__()
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
         kernel_sizes = [3]
@@ -148,7 +148,7 @@ def SAUnet_test():
     C_down_list = [64, 128, 256, 512]
     C_list_attn = torch.tensor([64, 64, 128, 128, 256])
     attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-    model = SAUnet(SAUnet_input_shape, SAUnet_output_shape,C_down_list,attn_params).to(device)
+    model = SAUnetNoMultiScale(SAUnet_input_shape, SAUnet_output_shape,C_down_list,attn_params).to(device)
     x = input_data
     get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info", x, model)
 

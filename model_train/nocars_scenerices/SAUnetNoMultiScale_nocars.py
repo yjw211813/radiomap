@@ -1,14 +1,14 @@
 import torch
 from model_app.SAUnet_app import SAUnet_app
-from model.sigle_Unet.SAUnetNoMultiScale import SAUnet
+from model.sigle_Unet.SAUnetNoMultiScale import SAUnetNoMultiScale
 import os
-from model_train.data_config import get_cars_load
+from model_train.data_config import get_nocars_load
 
 if __name__ == '__main__':
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
 
-    train_loader, val_loader, test_loader = get_cars_load()
+    train_loader, val_loader, test_loader = get_nocars_load()
     base_dir = r"/home/code/radioMap/runs/"
 
     log_dir = base_dir + r'model_log/old_SAUnetNoMultiScale/'# log 存储位置
@@ -20,7 +20,7 @@ if __name__ == '__main__':
     print("old_SAUnetNoMultiScale,cuda = 3")
     # 定义模型
 
-    BTM_ghost_UNet_input_shape = [6, 256, 256]
+    BTM_ghost_UNet_input_shape = [5, 256, 256]
     BTM_ghost_UNet_output_shape = [1, 256, 256]
     C_down_list = [64, 128, 256, 512]
     C_list_attn = torch.tensor([64, 64, 128, 128, 256])

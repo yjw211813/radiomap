@@ -19,7 +19,7 @@ import pandas as pd
 from model.sigle_Unet.simple_CNN import SAUnetForProcess
 from model.sigle_Unet.SAUnet import SAUnet
 from model_app.SAUnet_app import preprocess_data
-
+from model_train.data_config import get_cars_load, get_nocars_load
 
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
     """
@@ -304,38 +304,10 @@ def model_compare(radioUnet_model, UVM_model, REMGAN_netG, SAUnet_model, compare
 if __name__ == "__main__":
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    simuSetDict = {
-        "ind1": 0,  # 起始索引
-        "ind2": 0,  # 末尾索引
-        "dir_dataset": r"/home/data/path_loss_data/RadioSeer/RadioMapSeer/",  # 数据集文件夹
-        "numTx": 80,  # 信源数量设定
-        "thresh": 0.05,  # 环境噪声
-        "simulation": "rand",  # 模拟类型："DPM", "IRT2", "rand",如果是"IRT4" numTx必须小于2，如果大于 2 则强制设定为 2
-        "carsSimul": "yes",  # 是否开启小车作为仿真
-        "carsInput": "yes",  # 是否将小车图作为模型输入
-        "IRT2maxW": 0.3,  # 如果simulation是rand 表明是融合DPM和IRT2 IRT2maxW这为最大的加权值
-        "cityMap": "complete",  # 是否输入完全的城市地图
-        "missing": 1,  # 地图缺失号码
-        "fix_samples": 655,  # 采样数量 如果为0 则随机一个采样数 下面是随机范围 如果不为0则使用固定的采样数
-        "num_samples_low": 10,  # 最低采样数
-        "num_samples_high": 300,  # 最高采样数
-        "inter_flag": True,  # 看是否需要插值图像
-        "scale256_flag": True,  # 取值范围是否为0 - 255
-        "sample_flag": True,  # 是否有采样输入
-        "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
-        "formula_flag": True
-    }
+    train_loader, val_loader, test_loader = get_cars_load()
+    base_dir = r"/home/code/radioMap/runs/"
 
-    train_batch_size = 4
-    val_batch_size = 4
-    test_batch_size = 4
-    # 加载数据集
-
-    Radio_test = RadioMapSeerLoader(simuSetDict, phase="test")
-
-    test_loader = DataLoader(Radio_test, batch_size=test_batch_size, shuffle=True, num_workers=4)
-
-    compare_dir = r"/home/code/radio_map_construction/runs/model_val_log/compare/"
+    compare_dir = base_dir + r"/model_val_log/compare/"
 
     input_channels = 6
     WNetPhase = "secondU"
@@ -343,7 +315,7 @@ if __name__ == "__main__":
     radioUnet_model.to(device)
     radioUnet_model.eval()
     radioUnet_load_epoch = 96
-    radioUnet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/RadioUnet/"  # 模型存储位置
+    radioUnet_save_dir = base_dir + r"/model_pth/RadioUnet/"  # 模型存储位置
     radioUnet_checkpoint_path = os.path.join(radioUnet_save_dir,
                                              f"checkpoint_{WNetPhase}_epoch_{radioUnet_load_epoch}.pth")
     radioUnet_checkpoint = torch.load(radioUnet_checkpoint_path, weights_only=True, map_location=device)
@@ -355,7 +327,7 @@ if __name__ == "__main__":
     UVM_model.to(device)
     UVM_model.eval()
     UVM_load_epoch = 20
-    UVM_save_dir = r"/home/code/radio_map_construction/runs/model_pth/UVM/"
+    UVM_save_dir = base_dir + r"/model_pth/UVM/"
     UVM_checkpoint_path = os.path.join(UVM_save_dir, f"checkpoint_epoch_{UVM_load_epoch}.pth")
     UVM_checkpoint = torch.load(UVM_checkpoint_path, weights_only=True, map_location=device)
 
@@ -367,7 +339,7 @@ if __name__ == "__main__":
     REMGAN_load_epoch = 180
     REMGAN_netG.to(device)
     REMGAN_netD.to(device)
-    REMGAN_save_dir = r"/home/code/radio_map_construction/runs/model_pth/REM_GAN/"
+    REMGAN_save_dir = base_dir + r"/model_pth/REM_GAN/"
     # 加载最佳检查点
     best_checkpoint_path = os.path.join(REMGAN_save_dir, f"checkpoint_REMGAN_epoch_{REMGAN_load_epoch}.pth")
     if os.path.exists(best_checkpoint_path):
@@ -387,7 +359,7 @@ if __name__ == "__main__":
     output_shape = [1, 256, 256]
     SAUNet_model = SAUnetForProcess(input_shape = input_shape,output_shape= output_shape)
     load_epoch = 63
-    SAUNet_save_dir = r"/home/code/radio_map_construction/runs/model_pth/SAUnetNoSanet/"
+    SAUNet_save_dir = base_dir + r"/model_pth/SAUnetNoSanet/"
 
     SAUNet_checkpoint_path = os.path.join(SAUNet_save_dir, f"checkpoint_epoch_{load_epoch}.pth")
     SAUNet_checkpoint = torch.load(SAUNet_checkpoint_path, weights_only=True, map_location=device)

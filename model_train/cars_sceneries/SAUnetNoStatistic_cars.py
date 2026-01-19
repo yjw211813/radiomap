@@ -5,18 +5,18 @@ import os
 from model_train.data_config import get_cars_load
 
 if __name__ == '__main__':
-    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
 
-    train_loader, val_loader, test_loader = get_cars_load()
+    train_loader, val_loader, test_loader = get_cars_load(formula_flag= False)
     base_dir = r"/home/code/radioMap/runs/"
-    log_dir = base_dir + r'model_log/old_SAUnetNoSatistic/'# log 存储位置
-    model_load_dir = base_dir + r"model_pth/old_SAUnetNoSatistic/"# 模型加载目录
-    model_save_dir = base_dir + r"model_pth/old_SAUnetNoSatistic/"# 模型存储位置
+    log_dir = base_dir + r'model_log/SAUnetNoSatistic_cars/'# log 存储位置
+    model_load_dir = base_dir + r"model_pth/SAUnetNoSatistic_cars/"# 模型加载目录
+    model_save_dir = base_dir + r"model_pth/SAUnetNoSatistic_cars/"# 模型存储位置
 
     os.makedirs(model_save_dir, exist_ok=True)
 
-    print("old_SAUnetNoSatistic,cuda = 2")
+    print("old_SAUnetNoSatistic,cuda = 0")
     # 定义模型
 
     BTM_ghost_UNet_input_shape = [5, 256, 256]
@@ -33,5 +33,5 @@ if __name__ == '__main__':
 
     app = SAUnet_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
     load_epoch = 0
-    val_dir = base_dir + r"model_val_log/old_SAUnetNoSatistic/"
+    val_dir = base_dir + r"model_val_log/SAUnetNoSatistic_cars/"
     app.train(model, train_loader, val_loader, total_epoch)

@@ -2,14 +2,14 @@ from model_app.radioUnetAPP import RadioWNet_app
 import torch
 import os
 from model.radioUnet.RadioUnetModel import RadioWNet
-from model_train.data_config import get_cars_load
+from model_train.data_config import get_nocars_load
 
 if __name__ == '__main__':
     device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
     base_dir = r"/home/code/radioMap/runs/"
 
-    train_loader, val_loader, test_loader = get_cars_load()
+    train_loader, val_loader, test_loader = get_nocars_load()
 
 
     log_dir = base_dir + r'model_log/RadioUnet/'  # log 存储位置
@@ -27,11 +27,11 @@ if __name__ == '__main__':
     print("RadioUnet")
     # 定义模型
     WNetPhase = "firstU"
-    model = RadioWNet(inputs=6,phase=WNetPhase)
+    model = RadioWNet(inputs=5,phase=WNetPhase)
     app.train(model, train_loader, val_loader, total_epoch,WNetPhase = "firstU")
 
     WNetPhase = "secondU"
-    model = RadioWNet(inputs=6,phase=WNetPhase)
+    model = RadioWNet(inputs=5,phase=WNetPhase)
     # 加载第一层最佳权重
     model, best_loss, epoch = app.load_best_checkpoint(model = model,WNetPhase = "firstU")
     print("best_loss = ",best_loss)
