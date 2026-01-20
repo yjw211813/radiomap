@@ -26,8 +26,9 @@ if __name__ == '__main__':
     output_shape = [1, 256, 256]
     C_down_list = [64, 128, 256, 512]
     C_list_attn = torch.tensor([64, 64, 128, 128, 256])
+    attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
     model = SAUnet(input_shape = input_shape,output_shape= output_shape,
-                   C_down_list=C_down_list, attn_params=C_list_attn)
+                   C_down_list=C_down_list, attn_params=attn_params)
 
     # 定义训练对象
     warmup_epochs = 5
@@ -36,5 +37,5 @@ if __name__ == '__main__':
 
     app = SAUnet_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
     load_epoch = 0
-    val_dir = r"/home/code/radioMap/runs/model_val_log/SAUnet_Nocars/"
+    val_dir = base_dir + r"model_val_log/SAUnet_Nocars/"
     app.train(model, train_loader, val_loader, total_epoch)

@@ -8,7 +8,7 @@ if __name__ == '__main__':
     device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
 
-    train_loader, val_loader, test_loader = get_nocars_load()
+    train_loader, val_loader, test_loader = get_nocars_load(formula_flag =  False)
     base_dir = r"/home/code/radioMap/runs/"
     log_dir = base_dir + r'model_log/old_SAUnetNoSatistic/'# log 存储位置
     model_load_dir = base_dir + r"model_pth/old_SAUnetNoSatistic/"# 模型加载目录
@@ -19,7 +19,7 @@ if __name__ == '__main__':
     print("old_SAUnetNoSatistic,cuda = 2")
     # 定义模型
 
-    BTM_ghost_UNet_input_shape = [5, 256, 256]
+    BTM_ghost_UNet_input_shape = [4, 256, 256]
     BTM_ghost_UNet_output_shape = [1, 256, 256]
     C_down_list = [64, 128, 256, 512]
     C_list_attn = torch.tensor([64, 64, 128, 128, 256])
