@@ -8,7 +8,7 @@ if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
 
-    train_loader, val_loader, test_loader = get_cars_load(formula_flag= False)
+    train_loader, val_loader, test_loader = get_cars_load(formula_flag= False,inter_flag=False)
     base_dir = r"/home/code/radioMap/runs/"
     log_dir = base_dir + r'model_log/SAUnetNoSatistic_cars/'# log 存储位置
     model_load_dir = base_dir + r"model_pth/SAUnetNoSatistic_cars/"# 模型加载目录
@@ -19,19 +19,17 @@ if __name__ == '__main__':
     print("old_SAUnetNoSatistic,cuda = 0")
     # 定义模型
 
-    BTM_ghost_UNet_input_shape = [5, 256, 256]
-    BTM_ghost_UNet_output_shape = [1, 256, 256]
+    input_shape = [4, 256, 256]
+    output_shape = [1, 256, 256]
     C_down_list = [64, 128, 256, 512]
-    C_list_attn = torch.tensor([64, 64, 128, 128, 256])
-    attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-    model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list,attn_params)
+    model = SAUnet(input_shape = input_shape,output_shape= output_shape,C_down_list=C_down_list)
 
     # 定义训练对象
     warmup_epochs = 5
     total_epoch = 100
     start_epoch = 0
 
-    app = SAUnet_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
+    app = SAUnet_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device,nostatistic_flag=True)
     load_epoch = 0
     val_dir = base_dir + r"model_val_log/SAUnetNoSatistic_cars/"
     app.train(model, train_loader, val_loader, total_epoch)

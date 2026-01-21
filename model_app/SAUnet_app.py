@@ -14,7 +14,7 @@ from tqdm import tqdm
 import torchvision
 
 
-def preprocess_data(inputs,device, norm_type='minmax'):
+def preprocess_data(inputs,device, norm_type='minmax',nostatistic_flag=False):
     """
     预处理输入数据和目标数据
 
@@ -32,8 +32,10 @@ def preprocess_data(inputs,device, norm_type='minmax'):
         inputs = inputs.to(device)
 
         # 对第2-4通道进行初步缩放（假设这些通道是图像通道）
-        inputs[:, 2:5, :, :] = inputs[:, 2:5, :, :] / 256.0
+        inputs[:, 2:, :, :] = inputs[:, 2:, :, :] / 256.0
 
+        if nostatistic_flag:
+            return inputs
 
         if norm_type == 'minmax':
             channel_data = inputs[:, 3, :, :]
@@ -63,13 +65,14 @@ def preprocess_data(inputs,device, norm_type='minmax'):
 
 
 class SAUnet_app():
-    def __init__(self, start_epoch, log_dir, warmup_epochs, model_save_dir,device):
+    def __init__(self, start_epoch, log_dir, warmup_epochs, model_save_dir,device,nostatistic_flag=False):
 
         self.start_epoch = start_epoch
         self.log_dir = log_dir
         self.warmup_epochs = warmup_epochs
         self.model_save_dir = model_save_dir
         self.device = device
+        self.nostatistic_flag = nostatistic_flag
 
     def evaluate(self, model, val_loader, writer, epoch):
         model.eval()  # Set model to evaluation mode
@@ -86,7 +89,7 @@ class SAUnet_app():
 
                 inputs, targets = data
                 targets = targets.to(self.device)
-                inputs = preprocess_data(inputs, self.device)
+                inputs = preprocess_data(inputs, self.device,nostatistic_flag=self.nostatistic_flag)
                 # Forward pass
                 outputs = model(inputs)
                 outputs = outputs * 256
@@ -187,7 +190,7 @@ class SAUnet_app():
             )
 
             for inputs, targets in train_loader_with_progress:
-                inputs = preprocess_data(inputs, self.device)
+                inputs = preprocess_data(inputs, self.device,nostatistic_flag=self.nostatistic_flag)
                 targets = targets.to(self.device)
 
                 outputs = model(inputs)

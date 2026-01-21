@@ -24,7 +24,6 @@ from model.sigle_Unet.SAUnet_NoSA import SAUnetNoSA
 from model.sigle_Unet.SAUnet_v0 import SAUnet_old
 
 
-
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
     """
     高级模型对比可视化：包含原始输出、残差图及样本级指标
@@ -78,7 +77,9 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
             ax_pred.imshow(pred, cmap='jet', vmin=global_min, vmax=global_max)
 
             # 计算该样本的 PSNR (简单转换回 tensor)
-            sample_psnr = psnr(torch.tensor(pred), torch.tensor(target_i), data_range=global_max - global_min)
+            data_range = float(max(global_max - global_min, 1e-5))  # 增加保护
+            sample_psnr = psnr(torch.tensor(pred), torch.tensor(target_i), data_range=data_range)
+
 
             title_color = 'red' if name == 'SAUnet' else 'black'
             display_name = f"{name}(ours)" if name == 'SAUnet' else name
@@ -104,31 +105,7 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
 def plot_model_comparison_metrics(models, metrics, total_samples, compare_dir, figsize=(18, 12), dpi=300):
     """
     绘制多个模型的NMSE/SSIM/PSNR批次对比曲线和平均指标柱状图
-
-    参数说明：
-    ----------
-    models : dict
-        模型名称的字典（键为模型名，值无特殊要求，仅需遍历键即可）
-    metrics : dict
-        各模型的评估指标字典，结构要求：
-        metrics[model_name] = {
-            'batch_indices': 批次索引列表/数组,
-            'batch_nmse': 各批次NMSE值列表/数组,
-            'batch_ssim': 各批次SSIM值列表/数组,
-            'batch_psnr': 各批次PSNR值列表/数组,
-            'total_mse': 总MSE值,
-            'total_energy': 总能量值（用于计算NMSE）,
-            'total_ssim': 总SSIM值,
-            'total_psnr': 总PSNR值
-        }
-    total_samples : int/float
-        总样本数，用于计算平均指标
-    compare_dir : str
-        图片保存目录
-    figsize : tuple, 可选
-        绘图画布大小，默认(18, 12)
-    dpi : int, 可选
-        保存图片的分辨率，默认300
+    返回计算好的平均指标字典
     """
     # 参数检查
     if not isinstance(models, dict) or len(models) == 0:
@@ -251,29 +228,29 @@ def plot_model_comparison_metrics(models, metrics, total_samples, compare_dir, f
         plt.savefig(save_path, dpi=dpi, bbox_inches='tight')
         print(f"对比图已保存至：{save_path}")
 
+        return avg_metrics  # 返回平均指标
+
     except Exception as e:
         raise RuntimeError(f"绘图过程中出错：{str(e)}")
     finally:
         # 确保关闭画布，释放资源
         plt.close()
 
-def model_compare(radioUnet_model, UVM_model, SAUnet_model, compare_dir, test_loader, device):
+
+def model_compare(models_dict, compare_dir, test_loader, device):
     """
-    多个模型的对比分析 - 修改版本
+    多个模型的对比分析 - 支持任意数量模型（通过字典传入）
+    参数：
+        models_dict: 模型字典，格式 {模型名: 模型实例}
+        compare_dir: 对比结果保存目录
+        test_loader: 测试数据加载器
+        device: 计算设备 (cuda/cpu)
     """
     criterion = nn.MSELoss()
 
     # 为每个模型初始化指标存储
-    models = {
-        'RadioUnet': radioUnet_model,
-        'UVM': UVM_model,
-
-        "SAUnet": SAUnet_model,
-    }
-
-    # 存储每个模型的指标
     metrics = {}
-    for model_name in models.keys():
+    for model_name in models_dict.keys():
         metrics[model_name] = {
             'total_mse': 0.0,
             'total_energy': 0.0,
@@ -289,9 +266,9 @@ def model_compare(radioUnet_model, UVM_model, SAUnet_model, compare_dir, test_lo
     os.makedirs(compare_dir, exist_ok=True)
 
     with torch.no_grad():
-        # 只测试前10个批次
+        # 只测试前20个批次
         for batch_idx, data in enumerate(tqdm(test_loader, desc="Model Comparison", ncols=100, leave=False)):
-            if batch_idx >= 20:  # 只测试前10个批次
+            if batch_idx >= 20:
                 break
 
             inputs, targets = data
@@ -300,37 +277,43 @@ def model_compare(radioUnet_model, UVM_model, SAUnet_model, compare_dir, test_lo
             batch_size = inputs.size(0)
             total_samples += batch_size
 
-            # 获取各个模型的输出
+            # 获取各个模型的输出（核心改造：遍历模型字典）
             outputs_dict = {}
+            for model_name, model in models_dict.items():
+                if model_name == "SAUnet":
+                    # SAUnet 专属处理逻辑
+                    processed_inputs = preprocess_data(inputs, device)
+                    model_outputs = model(processed_inputs)
 
-            # RadioUnet 输出
-            radioUnet_outputs, _ = radioUnet_model(inputs)
-            outputs_dict['RadioUnet'] = radioUnet_outputs
+                    # 【核心修复】：检查返回值是否为列表或元组
+                    if isinstance(model_outputs, (list, tuple)):
+                        model_outputs = model_outputs[0]
 
-            # UVM 输出
-            UVM_outputs = UVM_model(inputs)
-            outputs_dict['UVM'] = UVM_outputs
+                    # 确保提取后再进行数值缩放
+                    outputs_dict[model_name] = model_outputs * 256
+                else:
+                    # 其他模型通用处理逻辑
+                    model_outputs = model(inputs)
 
+                    # 【核心修复】：统一兼容列表或元组返回
+                    if isinstance(model_outputs, (list, tuple)):
+                        model_outputs = model_outputs[0]
 
-            # SAUnet 输出
-            inputs = preprocess_data(inputs, device)
-            SAUnet_outputs = SAUnet_model(inputs)
-
-            outputs_dict['SAUnet'] = SAUnet_outputs * 256
+                    outputs_dict[model_name] = model_outputs
 
             # 为每个模型计算指标
             for model_name, outputs in outputs_dict.items():
-                # 计算损失和指标
+
                 mse_batch = criterion(outputs, targets)
 
-                # 修正：计算每个样本的能量，然后求和
+                # 计算每个样本的能量，然后求和
                 energy_per_sample = torch.mean(targets ** 2, dim=[1, 2, 3])  # 每个样本的平均能量
                 energy_batch = torch.sum(energy_per_sample)  # 批次总能量
 
                 metrics[model_name]['total_mse'] += mse_batch.item() * batch_size
                 metrics[model_name]['total_energy'] += energy_batch.item()
 
-                # 修正NMSE计算：使用批次内平均
+                # 计算批次NMSE
                 if energy_batch.item() == 0:
                     nmse_loss_value = 0.0 if mse_batch.item() == 0 else float('inf')
                 else:
@@ -350,13 +333,17 @@ def model_compare(radioUnet_model, UVM_model, SAUnet_model, compare_dir, test_lo
             # 创建多模型对比图
             create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
 
-    plot_model_comparison_metrics(models, metrics, total_samples, compare_dir)
+    # 绘制指标图并获取平均指标
+    avg_metrics = plot_model_comparison_metrics(models_dict, metrics, total_samples, compare_dir)
+
     # 打印详细指标
     print("\n" + "=" * 60)
-    print("MODEL COMPARISON RESULTS (First 10 batches)")
+    print("MODEL COMPARISON RESULTS (First 20 batches)")
     print("=" * 60)
 
-    for model_name in models.keys():
+    for model_name in models_dict.keys():
+        if model_name not in avg_metrics:
+            continue
         print(f"\n{model_name}:")
         print(f"  NMSE:  {avg_metrics[model_name]['NMSE']:.6f}")
         print(f"  RMSE:  {avg_metrics[model_name]['RMSE']:.6f}")
@@ -372,7 +359,7 @@ def model_compare(radioUnet_model, UVM_model, SAUnet_model, compare_dir, test_lo
     return avg_metrics
 
 
-def get_radioUnet_model(base_dir,load_epoch):
+def get_radioUnet_model(base_dir, load_epoch, device):
     input_channels = 6
     WNetPhase = "secondU"
     radioUnet_model = RadioWNet(inputs=input_channels, phase=WNetPhase)
@@ -388,7 +375,8 @@ def get_radioUnet_model(base_dir,load_epoch):
     print(f"radioUnet加载历史数据load_epoch:{radioUnet_load_epoch}成功")
     return radioUnet_model
 
-def get_UVM_model(base_dir,load_epoch):
+
+def get_UVM_model(base_dir, load_epoch, device):
     input_channels = 6
     UVM_model = UVMNet(n_channels=input_channels)
     UVM_model.to(device)
@@ -402,7 +390,8 @@ def get_UVM_model(base_dir,load_epoch):
     print(f"UVM 加载历史数据load_epoch:{UVM_load_epoch}成功")
     return UVM_model
 
-def get_REM_model(base_dir,load_epoch):
+
+def get_REM_model(base_dir, load_epoch, device):
     input_channels = 6
     REMGAN_netG = modules.RadioWNet(inputs=input_channels, phase="firstU")
     REMGAN_netD = Discriminator()
@@ -426,13 +415,15 @@ def get_REM_model(base_dir,load_epoch):
     REMGAN_netD.eval()
     return REMGAN_netG
 
-def get_SAUNet_model(base_dir,load_epoch):
+
+def get_SAUNet_model(base_dir, load_epoch, device):
     input_shape = [6, 256, 256]
     output_shape = [1, 256, 256]
     C_down_list = [32, 64, 128, 256]
     C_list_attn = torch.tensor([64, 64, 128, 128, 128])
     attn_params = [C_list_attn, C_list_attn // 2, C_list_attn // 2, C_list_attn // 2]
-    SAUNet_model = SAUnet_old(input_shape= input_shape,output_shape = output_shape,C_down_list=C_down_list,attn_params=attn_params)
+    SAUNet_model = SAUnet_old(input_shape=input_shape, output_shape=output_shape, C_down_list=C_down_list,
+                              attn_params=attn_params)
     load_epoch = load_epoch
     SAUNet_save_dir = base_dir + r"/model_pth/old_SAUnet/"
 
@@ -445,19 +436,34 @@ def get_SAUNet_model(base_dir,load_epoch):
     SAUNet_model.eval()  # Set model to evaluation mode
     return SAUNet_model
 
-if __name__ == "__main__":
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+if __name__ == "__main__":
+    # 设备初始化
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+
+    # 加载数据
     train_loader, val_loader, test_loader = get_cars_load()
+
+    # 路径配置
     base_dir = r"/home/code/radioMap/runs"
     compare_dir = base_dir + r"/model_val_log/compare/"
-
-    radioUnet_model = get_radioUnet_model(base_dir, 95)
-    UVM_model = get_UVM_model(base_dir, 20)
-    # REMGAN_model = get_REM_model(base_dir, 180)
     sa_base_url = r"/home/code/radio_map_construction/runs"
-    SAUNet_model = get_SAUNet_model(sa_base_url, 34)
 
+    # 加载各个模型
+    # UVM_model = get_UVM_model(base_dir, 20, device)
+    radioUnet_model = get_radioUnet_model(base_dir, 95, device)
 
-    avg_metrics = model_compare(radioUnet_model, UVM_model, SAUNet_model, compare_dir, test_loader,
-                                device)
+    SAUNet_model = get_SAUNet_model(sa_base_url, 34, device)
+    # 可按需添加更多模型，例如：
+    # REMGAN_model = get_REM_model(base_dir, 180, device)
+
+    # 构建模型字典（核心：支持任意数量模型）
+    models_dict = {
+        'RadioUnet': radioUnet_model,
+        # 'UVM': UVM_model,
+        'SAUnet': SAUNet_model,
+        # 'REMGAN': REMGAN_model  # 按需添加
+    }
+
+    # 执行模型对比（传入模型字典）
+    avg_metrics = model_compare(models_dict, compare_dir, test_loader, device)

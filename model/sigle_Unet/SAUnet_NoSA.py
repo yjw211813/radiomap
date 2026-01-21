@@ -11,12 +11,99 @@ from model.sub_block.low_conv import multiScaleConvDown,multiScaleUpSample
 from torch.nn import functional as F
 from model.sub_block.statistic_tools import gpu_statistic
 
-
-
 class Swish(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
 # 变换到相同形状进行加和形式
+
+class AttnBlock(nn.Module):
+    def __init__(self, in_ch):
+        super(AttnBlock,self).__init__()
+        self.group_norm = nn.GroupNorm(32, in_ch)
+        self.proj_q = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0) # 卷积
+        self.proj_k = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+        self.proj_v = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+        self.proj = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        h = self.group_norm(x)
+        q = self.proj_q(h)
+        k = self.proj_k(h)
+        v = self.proj_v(h)
+
+        q = q.permute(0, 2, 3, 1).view(B, H * W, C)
+        k = k.view(B, C, H * W)
+        w = torch.bmm(q, k) * (int(C) ** (-0.5))
+        assert list(w.shape) == [B, H * W, H * W]
+        w = F.softmax(w, dim=-1)
+
+        v = v.permute(0, 2, 3, 1).view(B, H * W, C)
+        h = torch.bmm(w, v)
+        assert list(h.shape) == [B, H * W, C]
+        h = h.view(B, H, W, C).permute(0, 3, 1, 2)
+        h = self.proj(h)
+
+        return x + h
+
+class SAUInputConv(nn.Module):
+    """
+    输入卷积层：处理输入特征图，转换为指定通道数
+    """
+    def __init__(self, in_ch, out_ch, kernel_sizes=[3, 5]):
+        super().__init__()
+        self.conv = nn.Sequential(
+            inception_ghost_sum(in_ch, out_ch, kernel_list=kernel_sizes, dilated_list=[1, 1]),
+            inception_ghost_sum(out_ch, out_ch, kernel_list=kernel_sizes, dilated_list=[1, 1])
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+
+
+class SAUDownBlock(nn.Module):
+    """
+    通用块：集成 InceptionGhost、Attention 和 采样层
+    """
+
+    def __init__(self, in_ch, out_ch, use_attn=False, kernel_sizes=[3, 5]):
+        super().__init__()
+        layers = []
+        layers.append(multiScaleConvDown(in_ch, kernel_sizes))
+        layers.append(inception_ghost_sum(in_ch, out_ch, kernel_list=kernel_sizes, dilated_list=[1, 1]))
+        layers.append(inception_ghost_sum(out_ch, out_ch, kernel_list=kernel_sizes, dilated_list=[1, 1]))
+        if use_attn:
+            layers.append(AttnBlock(out_ch))
+
+        self.block = nn.Sequential(*layers)
+    def forward(self, x):
+        return self.block(x)
+
+class SAUUpBlock(nn.Module):
+    """
+    通用块：集成 InceptionGhost、Attention 和 采样层
+    """
+    def __init__(self, in_ch, out_ch, use_attn=False, kernel_sizes=[3, 5]):
+        super().__init__()
+        layers = []
+        layers.append(inception_ghost_sum(in_ch, out_ch, kernel_list=kernel_sizes, dilated_list=[1, 1]))
+        layers.append(inception_ghost_sum(out_ch, out_ch, kernel_list=kernel_sizes, dilated_list=[1, 1]))
+        if use_attn:
+            layers.append(AttnBlock(out_ch))
+        layers.append(multiScaleUpSample(out_ch, kernel_sizes, factor=0.5))
+        self.block = nn.Sequential(*layers)
+    def forward(self, x):
+        return self.block(x)
+
+class SAUnetOut(nn.Module):
+    def __init__(self, C_in, C_out):
+        super(SAUnetOut, self).__init__()
+        self.conv = nn.Conv2d(C_in, C_out, kernel_size=1)
+
+    def forward(self, x):
+        return self.conv(x)
 
 class SAUnetNoSA(nn.Module):
     # 修改上卷积方法
@@ -25,14 +112,16 @@ class SAUnetNoSA(nn.Module):
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
         kernel_sizes = [3, 5]
-        # 创建下采样路径（编码器）
-        self.encoder = nn.ModuleList()
-        in_ch = self.input_channel
-        for out_ch in C_down_list:
-            self.encoder.append(nn.Sequential(
-                inception_ghost_sum(C_in=in_ch, C_out=out_ch,  kernel_list=kernel_sizes, dilated_list=[1,1]),
-                inception_ghost_sum(C_in=out_ch, C_out=out_ch, kernel_list=kernel_sizes, dilated_list=[1, 1]),
-                multiScaleConvDown(out_ch,kernel_sizes)
+        atten_layer_count = len(C_down_list) - 3
+        # --- 编码器 (Encoder) ---
+        self.encoders = nn.ModuleList()
+        self.encoders.append(SAUInputConv(self.input_channel, C_down_list[0], kernel_sizes))
+        in_ch = C_down_list[0]
+        for i, out_ch in enumerate(C_down_list):
+            self.encoders.append(SAUDownBlock(
+                in_ch, out_ch,
+                use_attn=False,
+                kernel_sizes=kernel_sizes
             ))
             in_ch = out_ch
 
@@ -40,33 +129,23 @@ class SAUnetNoSA(nn.Module):
         self.conv_center = fractal_conv(C_in=C_down_list[-1],C_out=C_down_list[-1],kernel_list = kernel_sizes,dilated_list = [1,1],inception_module = inception_sum)
 
         # 创建上采样路径（解码器）
-        self.decodes = nn.ModuleList()
-        for i in range(len(C_down_list), 0, -1):
-            i = i -1
-            self.decodes.append(
-                nn.Sequential(
-                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i],C_out=C_down_list[i] + C_down_list[i], kernel_list=kernel_sizes, dilated_list=[1,1]),
-                    inception_ghost_sum(C_in=C_down_list[i] + C_down_list[i], C_out=C_down_list[i],kernel_list=kernel_sizes, dilated_list=[1, 1]),
-                    multiScaleUpSample(C_down_list[i],kernel_sizes,factor=0.5)
-                )
-            )
-        # 创建注意力模块
-        self.attentions = nn.ModuleList()
-        self.repeat_factors = [4,4,4,2]
+        self.decoders = nn.ModuleList()
+        # 注意力层计数器
+        for i in range(len(C_down_list) - 1, -1, -1):
+            curr_ch = C_down_list[i]
+            dec_in_ch = curr_ch * 2
+            self.decoders.append(SAUUpBlock(
+                dec_in_ch, curr_ch,
+                use_attn=False,
+                kernel_sizes=kernel_sizes
+            ))
 
-        # 输出层
-        now_ch = C_down_list[0] // 2
-        self.tail = nn.Sequential(
-            nn.GroupNorm(now_ch // 4, now_ch),
-            Swish(),
-            nn.Conv2d(now_ch, self.output_channel, 3, stride=1, padding=1)
-        )
+        self.tail = SAUnetOut(C_down_list[0]//2 + C_down_list[0], self.output_channel)
 
     def forward(self, x):
-
         # 编码器路径
         encoder_outs = []
-        for layer in self.encoder:
+        for layer in self.encoders:
             x = layer(x)
             encoder_outs.append(x)
 
@@ -75,10 +154,9 @@ class SAUnetNoSA(nn.Module):
         center_out = self.conv_center(down4_out)
         x = torch.cat([center_out, down4_out], dim=1)
 
-        for i in range(len(self.decodes)):
+        for i in range(len(self.decoders)):
             # 上采样卷积
-            x = self.decodes[i](x)
-
+            x = self.decoders[i](x)
             # 跳跃连接（拼接编码器特征）
             skip_idx = len(encoder_outs) - 2 - i
             if skip_idx >= 0:
@@ -96,7 +174,7 @@ class SAUnetNoSA(nn.Module):
 def SAUnet_test():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     get_gpu_info = gpu_statistic(device)
-    batch_size = 16
+    batch_size = 8
     img_H = 256
     img_W = 256
     input_data = torch.randn(batch_size, 6, img_H, img_W).to(device)
@@ -104,7 +182,7 @@ def SAUnet_test():
     BTM_ghost_UNet_input_shape = [input_data.shape[1], input_data.shape[2], input_data.shape[3]]
     BTM_ghost_UNet_output_shape = [1, input_data.shape[2], input_data.shape[3]]
     C_down_list = [64, 128, 256, 512]
-    model = SAUnetNoSA(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list).to(device)
+    model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list).to(device)
     x = input_data
     get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info", x, model)
 

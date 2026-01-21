@@ -18,10 +18,10 @@ if __name__ == '__main__':
     print("old_SAUnet_ablation,cuda = 0")
     # 定义模型
 
-    SAUnet_input_shape = [6, 256, 256]
-    SAUnet_output_shape = [1, 256, 256]
+    input_shape = [6, 256, 256]
+    output_shape = [1, 256, 256]
     C_down_list = [64, 128, 256, 512]
-    model = SAUnetNoSA(SAUnet_input_shape, SAUnet_output_shape,C_down_list)
+    model = SAUnetNoSA(input_shape = input_shape,output_shape= output_shape,C_down_list=C_down_list)
 
     # 定义训练对象
     warmup_epochs = 5

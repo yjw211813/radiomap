@@ -10,16 +10,16 @@ if __name__ == '__main__':
     ########################
     # Load dataset         #
     ########################
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
     base_dir = r"/home/code/radioMap/runs/"
 
     train_loader, val_loader, test_loader =  get_cars_load()
 
-    log_dir = base_dir + r'model_log/REM_GAN/'
-    model_load_dir = base_dir + r"model_pth/REM_GAN/"
-    model_save_dir = base_dir + r"model_pth/REM_GAN/"
-    test_dir = base_dir + r"test_results/REM_GAN/"
+    log_dir = base_dir + r'model_log/REM_GAN_cars/'
+    model_load_dir = base_dir + r"model_pth/REM_GAN_cars/"
+    model_save_dir = base_dir + r"model_pth/REM_GAN_cars/"
+    test_dir = base_dir + r"test_results/REM_GAN_cars/"
 
     os.makedirs(model_save_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)

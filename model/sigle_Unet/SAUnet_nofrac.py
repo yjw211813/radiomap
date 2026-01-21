@@ -105,10 +105,10 @@ class SAUnetOut(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
-class SAUnet(nn.Module):
+class SAUnet_nofrac(nn.Module):
     # 修改上卷积方法
     def __init__(self, input_shape, output_shape, C_down_list):
-        super(SAUnet, self).__init__()
+        super(SAUnet_nofrac, self).__init__()
         self.input_channel, self.input_H, self.input_W = input_shape
         self.output_channel, _, _ = output_shape
         kernel_sizes = [3, 5]
@@ -126,7 +126,7 @@ class SAUnet(nn.Module):
             in_ch = out_ch
 
         # 中心卷积层
-        self.conv_center = fractal_conv(C_in=C_down_list[-1],C_out=C_down_list[-1],kernel_list = kernel_sizes,dilated_list = [1,1],inception_module = inception_sum)
+        self.conv_center = inception_ghost_sum(C_in=C_down_list[-1],C_out=C_down_list[-1],kernel_list = kernel_sizes,dilated_list = [1,1])
 
         # 创建上采样路径（解码器）
         self.decoders = nn.ModuleList()
@@ -182,7 +182,7 @@ def SAUnet_test():
     BTM_ghost_UNet_input_shape = [input_data.shape[1], input_data.shape[2], input_data.shape[3]]
     BTM_ghost_UNet_output_shape = [1, input_data.shape[2], input_data.shape[3]]
     C_down_list = [64, 128, 256, 512]
-    model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list).to(device)
+    model = SAUnet_nofrac(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list).to(device)
     x = input_data
     get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info", x, model)
 
