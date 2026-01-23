@@ -12,9 +12,9 @@ if __name__ == '__main__':
     train_loader, val_loader, test_loader = get_nocars_load()
 
 
-    log_dir = base_dir + r'model_log/RadioUnet/'  # log 存储位置
-    model_load_dir = base_dir + r"model_pth/RadioUnet/"  # 模型加载目录
-    model_save_dir = base_dir + r"model_pth/RadioUnet/"  # 模型存储位置
+    log_dir = base_dir + r'model_log/RadioUnet_nocars/'  # log 存储位置
+    model_load_dir = base_dir + r"model_pth/RadioUnet_nocars/"  # 模型加载目录
+    model_save_dir = base_dir + r"model_pth/RadioUnet_nocars/"  # 模型存储位置
 
     os.makedirs(model_save_dir, exist_ok=True)
 

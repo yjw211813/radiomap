@@ -2,9 +2,9 @@ from data.lib.seer_loader import RadioMapSeerLoader
 from torch.utils.data import DataLoader
 
 
-train_batch_size = 8  # 批次大小
-val_batch_size = 8
-test_batch_size = 8  # 批次大小1
+train_batch_size = 16  # 批次大小
+val_batch_size = 16
+test_batch_size = 32  # 批次大小1
 
 def get_cars_load(formula_flag: bool = True, inter_flag: bool = True):
     sample_rate_max = 0.03

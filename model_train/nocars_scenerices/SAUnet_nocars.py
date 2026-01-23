@@ -8,7 +8,7 @@ from model_train.data_config import get_nocars_load
 
 
 if __name__ == '__main__':
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
 
     train_loader, val_loader, test_loader =  get_nocars_load()
@@ -30,7 +30,7 @@ if __name__ == '__main__':
     # 定义训练对象
     warmup_epochs = 5
     total_epoch = 100
-    start_epoch = 0
+    start_epoch = 3
 
     app = SAUnet_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
     load_epoch = 0
