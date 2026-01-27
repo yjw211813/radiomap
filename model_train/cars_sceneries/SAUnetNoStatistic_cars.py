@@ -5,7 +5,7 @@ import os
 from model_train.data_config import get_cars_load
 
 if __name__ == '__main__':
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
 
     train_loader, val_loader, test_loader = get_cars_load(formula_flag= False,inter_flag=False)
@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     os.makedirs(model_save_dir, exist_ok=True)
 
-    print("old_SAUnetNoSatistic,cuda = 0")
+    print("old_SAUnetNoSatistic,cuda = 2")
     # 定义模型
 
     input_shape = [4, 256, 256]
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     # 定义训练对象
     warmup_epochs = 5
     total_epoch = 100
-    start_epoch = 0
+    start_epoch = 14
 
     app = SAUnet_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device,nostatistic_flag=True)
     load_epoch = 0

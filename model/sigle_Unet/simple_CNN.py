@@ -11,7 +11,7 @@ from model.sub_block.mid_conv import inception_ghost_sum,inception_sum
 from model.sub_block.low_conv import multiScaleConvDown,multiScaleUpSample,Conv_DownSampling2D,BasicNormConv
 from torch.nn import functional as F
 from model.sub_block.statistic_tools import gpu_statistic
-
+from torchsummary  import summary
 #  处理 下采样 处理 下采样 处理 下采样
 #  存
 class resConv(nn.Module):
@@ -194,7 +194,7 @@ def SAUnetForProcess_test():
     model = SAUnetForProcess(input_shape = input_shape,output_shape= output_shape).to(device)
 
     get_gpu_info.print_gpu_memory(description = "Conv3x3_DownSample GPU info", x = input_data1,model = model)
-
+    summary(model, input_size=(6, 256, 256),device = "cuda")
 
 
 def resConv_test():
@@ -267,6 +267,8 @@ def SAUnetDown_test():
                      C_out=C_out).to(device)
 
     get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info", input_data, model)
+    summary(model, input_size=(6, 256, 256), device="cuda")
+
 
 def SAUnetOut_test():
     """测试resConv模块"""
@@ -287,7 +289,7 @@ def SAUnetOut_test():
                      C_out=C_out).to(device)
 
     get_gpu_info.print_gpu_memory(description = "Conv3x3_DownSample GPU info", x = input_data1,model = model)
-
+    summary(model, input_size=(6, 256, 256),device = "cuda")
 
 
 if __name__ == '__main__':

@@ -67,7 +67,7 @@ class RadioMapSeerLoader(Dataset):
         self.sample_flag = True  # 是否有采样输入
         self.loss_samples_flag = False  # 是否定义loss为稀疏采样loss
         self.formula_flag = False
-
+        self.noise_sigma = 1
         # 将设置字典中的参数转为类属性
         for key, value in simuSetDict.items():
             setattr(self, key, value)
@@ -188,7 +188,7 @@ class RadioMapSeerLoader(Dataset):
 
         return io.imread(img_path) / 256
 
-    def create_input_samples(self, image_gain):
+    def create_input_samples(self, image_gain,noise_sigma):
         """创建输入采样点图"""
         image_samples = np.zeros((self.height, self.width))
 
@@ -203,8 +203,11 @@ class RadioMapSeerLoader(Dataset):
         y_samples = np.random.randint(0, self.width, size=num_samples)
 
         # 填充增益值
-        image_samples[x_samples, y_samples] = image_gain[x_samples, y_samples, 0]
+        base_values = image_gain[x_samples, y_samples, 0]
+        base_values += np.random.normal(0, noise_sigma, size=num_samples)
+        noisy_values = np.clip(base_values, 0, 255)
 
+        image_samples[x_samples, y_samples] = noisy_values
         return image_samples
 
     def idw_interpolate_sample(self,img_sample, k=5, power=2):
@@ -316,7 +319,7 @@ class RadioMapSeerLoader(Dataset):
 
         input_layers = [image_buildings, image_Tx]
         if self.sample_flag == True:
-            input_samples = self.create_input_samples(image_gain)
+            input_samples = self.create_input_samples(image_gain, self.noise_sigma)
             input_layers.append(input_samples)
 
             if self.formula_flag == True:

@@ -176,7 +176,6 @@ class fractal_conv(nn.Module):
         if C_out % 4 != 0:
             raise ValueError(f"C_out ({C_out}) must be divisible by 4")
         norm_flag = True
-        print("fractal_conv norm:",norm_flag)
         sub_Cout = int(C_out / 4)
 
         self.conv0001 = inception_module(C_in=C_in, C_out=sub_Cout, kernel_list=kernel_list, dilated_list=dilated_list, norm = norm_flag)

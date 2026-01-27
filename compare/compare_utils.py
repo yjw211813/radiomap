@@ -26,80 +26,90 @@ from model.sigle_Unet.SAUnet_v0 import SAUnet_old
 
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
     """
-    高级模型对比可视化：包含原始输出、残差图及样本级指标
+    将整个 batch 按每 2 个样本一组进行可视化，不满足 2 个的组舍弃。
     """
-    # 数据转换与维度处理
+    # 1. 数据准备
     if torch.is_tensor(targets):
         targets = targets.cpu().numpy()
-    targets = targets.squeeze(1)  # [B, H, W]
+    if targets.ndim == 4:
+        targets = targets.squeeze(1)
 
-    num_samples = min(4, targets.shape[0])
-    model_names = list(outputs_dict.keys())
-    num_cols = len(model_names) + 1  # 模型数 + 1 (Target)
-
-    # 准备处理后的输出字典
     processed_outputs = {}
     for name, out in outputs_dict.items():
         if torch.is_tensor(out):
             out = out.cpu().numpy()
-        processed_outputs[name] = out.squeeze(1)
+        if out.ndim == 4:
+            out = out.squeeze(1)
+        processed_outputs[name] = out
 
-    # 计算全局色阶范围（用于预测图对齐）
-    all_vals = [targets[:num_samples]] + [v[:num_samples] for v in processed_outputs.values()]
+    batch_size = targets.shape[0]
+    model_names = list(outputs_dict.keys())
+    num_cols = len(model_names) + 1
+
+    # 2. 计算整个 batch 的全局色阶范围（保持对比一致性）
+    all_vals = [targets] + list(processed_outputs.values())
     global_min = min(np.min(d) for d in all_vals)
     global_max = max(np.max(d) for d in all_vals)
 
-    # 创建画布：行数为 2*num_samples (一行预测图，一行残差图)
-    fig, axes = plt.subplots(num_samples * 2, num_cols,
-                             figsize=(4 * num_cols, 4 * num_samples * 2),
-                             gridspec_kw={'hspace': 0.3, 'wspace': 0.1})
+    # 3. 循环处理整个 Batch，步长为 2
+    # 使用 batch_idx * (batch_size // 2) 作为起始序号实现自增
+    start_img_idx = batch_idx * (batch_size // 2) + 1
 
-    for i in range(num_samples):
-        # --- 第一列：绘制 Target ---
-        ax_target = axes[i * 2, 0]
-        im_t = ax_target.imshow(targets[i], cmap='jet', vmin=global_min, vmax=global_max)
-        ax_target.set_title(f"Sample {i}\nGround Truth", fontweight='bold')
-        ax_target.axis('off')
+    for i in range(0, batch_size - 1, 2):  # 步长为2，且确保 i+1 存在
+        sample_indices = [i, i + 1]
 
-        # Target 下方留白或放置统计信息
-        axes[i * 2 + 1, 0].axis('off')
-        axes[i * 2 + 1, 0].text(0.5, 0.5, "Absolute\nError Map",
-                                ha='center', va='center', fontweight='bold')
+        # 创建画布 (2个样本 = 4行)
+        fig, axes = plt.subplots(4, num_cols,
+                                 figsize=(4.5 * num_cols, 16),
+                                 gridspec_kw={'hspace': 0.3, 'wspace': 0.15})
 
-        # --- 后续列：绘制各模型输出及残差 ---
-        for j, name in enumerate(model_names):
-            col = j + 1
-            pred = processed_outputs[name][i]
-            target_i = targets[i]
+        for row_idx, s_idx in enumerate(sample_indices):
+            # --- 第一列：Ground Truth ---
+            ax_target = axes[row_idx * 2, 0]
+            ax_target.imshow(targets[s_idx], cmap='jet', vmin=global_min, vmax=global_max)
+            ax_target.set_title(f"Sample {s_idx}\nGround Truth", fontweight='bold')
+            ax_target.axis('off')
 
-            # 1. 绘制预测图
-            ax_pred = axes[i * 2, col]
-            ax_pred.imshow(pred, cmap='jet', vmin=global_min, vmax=global_max)
+            ax_label = axes[row_idx * 2 + 1, 0]
+            ax_label.axis('off')
+            ax_label.text(0.5, 0.5, f"Residual Error\n(Inferno Style)",
+                          ha='center', va='center', fontweight='bold')
 
-            # 计算该样本的 PSNR (简单转换回 tensor)
-            data_range = float(max(global_max - global_min, 1e-5))  # 增加保护
-            sample_psnr = psnr(torch.tensor(pred), torch.tensor(target_i), data_range=data_range)
+            # --- 后续列：预测图与误差图 ---
+            for j, name in enumerate(model_names):
+                col = j + 1
+                pred = processed_outputs[name][s_idx]
+                target_i = targets[s_idx]
 
+                # 预测图
+                ax_pred = axes[row_idx * 2, col]
+                ax_pred.imshow(pred, cmap='jet', vmin=global_min, vmax=global_max)
 
-            title_color = 'red' if name == 'SAUnet' else 'black'
-            display_name = f"{name}(ours)" if name == 'SAUnet' else name
-            ax_pred.set_title(f"{display_name}\nPSNR: {sample_psnr:.2f}dB", color=title_color)
-            ax_pred.axis('off')
+                # 计算 PSNR
+                data_range = float(max(global_max - global_min, 1e-5))
+                mse = np.mean((pred - target_i) ** 2)
+                sample_psnr = 20 * np.log10(data_range / np.sqrt(mse)) if mse > 0 else 100
 
-            # 2. 绘制残差图 (Error Map)
-            ax_err = axes[i * 2 + 1, col]
-            error_map = np.abs(pred - target_i)
-            # 残差图使用不同的色阶，以突出显示误差
-            im_err = ax_err.imshow(error_map, cmap='hot')
-            ax_err.axis('off')
+                title_color = 'red' if 'SAUnet' in name else 'black'
+                ax_pred.set_title(f"{name}\nPSNR: {sample_psnr:.2f}dB", color=title_color)
+                ax_pred.axis('off')
 
-            # 为每个残差图添加一个小 colorbar
-            plt.colorbar(im_err, ax=ax_err, fraction=0.046, pad=0.04)
+                # 误差图 (使用 inferno 风格)
+                ax_err = axes[row_idx * 2 + 1, col]
+                error_map = np.abs(pred - target_i)
+                im_err = ax_err.imshow(error_map, cmap='inferno')
+                ax_err.axis('off')
+                plt.colorbar(im_err, ax=ax_err, fraction=0.046, pad=0.04)
 
-    # 保存图像
-    save_path = os.path.join(compare_dir, f"batch_{batch_idx}_analysis.png")
-    plt.savefig(save_path, dpi=200, bbox_inches='tight')
-    plt.close()
+        # 4. 保存当前这一组（2个样本）
+        current_save_idx = start_img_idx + (i // 2)
+        save_path = os.path.join(compare_dir, f"analysis_pair_{current_save_idx:03d}.png")
+
+        if not os.path.exists(compare_dir):
+            os.makedirs(compare_dir)
+
+        plt.savefig(save_path, dpi=200, bbox_inches='tight')
+        plt.close(fig)
 
 
 def plot_model_comparison_metrics(models, metrics, total_samples, compare_dir, figsize=(18, 12), dpi=300):
@@ -237,7 +247,7 @@ def plot_model_comparison_metrics(models, metrics, total_samples, compare_dir, f
         plt.close()
 
 
-def model_compare(models_dict, compare_dir, test_loader, device):
+def model_compare(models_dict, compare_dir, test_loader, device,cars_flag=False):
     """
     多个模型的对比分析 - 支持任意数量模型（通过字典传入）
     参数：
@@ -268,21 +278,25 @@ def model_compare(models_dict, compare_dir, test_loader, device):
     with torch.no_grad():
         # 只测试前20个批次
         for batch_idx, data in enumerate(tqdm(test_loader, desc="Model Comparison", ncols=100, leave=False)):
-            if batch_idx >= 15:
+            if batch_idx >= 20:
                 break
 
             inputs, targets = data
-            inputs = inputs.to(device)
-            targets = targets.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
             batch_size = inputs.size(0)
             total_samples += batch_size
+            if cars_flag:
+                cars_channel = inputs[:, 5, :, :]
+                mask = (cars_channel != 0)
 
             # 获取各个模型的输出（核心改造：遍历模型字典）
             outputs_dict = {}
+            outputs_dict_display = {}
             for model_name, model in models_dict.items():
-                if model_name == "SAUNet":
+                current_inputs = inputs.clone()
+                if model_name == "PAUNet":
                     # SAUnet 专属处理逻辑
-                    processed_inputs = preprocess_data(inputs, device)
+                    processed_inputs = preprocess_data(current_inputs, device)
                     model_outputs = model(processed_inputs)
 
                     # 【核心修复】：检查返回值是否为列表或元组
@@ -293,13 +307,25 @@ def model_compare(models_dict, compare_dir, test_loader, device):
                     outputs_dict[model_name] = model_outputs * 256
                 else:
                     # 其他模型通用处理逻辑
-                    model_outputs = model(inputs)
+                    model_outputs = model(current_inputs)
 
                     # 【核心修复】：统一兼容列表或元组返回
                     if isinstance(model_outputs, (list, tuple)):
                         model_outputs = model_outputs[0]
 
                     outputs_dict[model_name] = model_outputs
+
+                # --- 优化后的 Mask 覆盖逻辑 ---
+                current_data = outputs_dict[model_name].clone()
+                if cars_flag :
+                    for i in range(batch_size):
+                        m = mask[i]
+                        if m.any():  # 只有当存在车时才处理
+                            max_val = current_data[i].max()
+                            current_data[i].masked_fill_(m, max_val)
+
+                outputs_dict_display[model_name] = current_data
+
 
             # 为每个模型计算指标
             for model_name, outputs in outputs_dict.items():
@@ -330,8 +356,19 @@ def model_compare(models_dict, compare_dir, test_loader, device):
                 metrics[model_name]['batch_psnr'].append(psnr_batch.item())
                 metrics[model_name]['batch_indices'].append(batch_idx)
 
+
+            # --- 【修复重点】：处理 targets_display ---
+            targets_display = targets.clone()
+            if cars_flag:
+                for i in range(batch_size):
+                    m = mask[i]
+                    if m.any():
+                        max_val = targets_display[i].max()
+                        # 修复：之前这里错误地写成了 outputs_display[i]
+                        targets_display[i].masked_fill_(m, max_val)
+
             # 创建多模型对比图
-            create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
+            create_multi_model_comparison(targets_display, outputs_dict_display, batch_idx, compare_dir)
 
     # 绘制指标图并获取平均指标
     avg_metrics = plot_model_comparison_metrics(models_dict, metrics, total_samples, compare_dir)
@@ -360,7 +397,7 @@ def model_compare(models_dict, compare_dir, test_loader, device):
 
 
 
-def model_ablation(models_dict, compare_dir, test_loader, device):
+def model_ablation(models_dict, compare_dir, test_loader, device, cars_flag: bool = False):
     """
     多个模型的对比分析 - 支持任意数量模型（通过字典传入）
     参数：
@@ -391,7 +428,7 @@ def model_ablation(models_dict, compare_dir, test_loader, device):
     with torch.no_grad():
         # 只测试前20个批次
         for batch_idx, data in enumerate(tqdm(test_loader, desc="Model Comparison", ncols=100, leave=False)):
-            if batch_idx >= 15:
+            if batch_idx >= 20:
                 break
 
             inputs, targets = data
@@ -399,14 +436,19 @@ def model_ablation(models_dict, compare_dir, test_loader, device):
             targets = targets.to(device)
             batch_size = inputs.size(0)
             total_samples += batch_size
+            cars_channel = inputs[:, 5, :, :]
+            mask = (cars_channel != 0)
+
 
             # 获取各个模型的输出（核心改造：遍历模型字典）
             outputs_dict = {}
+            outputs_dict_display = {}
             for model_name, model in models_dict.items():
-                if model_name == "SAUNet_noStatistic":
+                current_inputs = inputs.clone()
+                if model_name == "w/o-Prior":
                     # SAUnet 专属处理逻辑
                     target_indices = [0, 1, 2, 5]
-                    processed_inputs = preprocess_data(inputs, device)
+                    processed_inputs = preprocess_data(current_inputs, device)
                     processed_inputs = processed_inputs[:, target_indices, :, :]
                     model_outputs = model(processed_inputs)
 
@@ -418,7 +460,7 @@ def model_ablation(models_dict, compare_dir, test_loader, device):
                     outputs_dict[model_name] = model_outputs * 256
                 else:
                     # SAUnet 专属处理逻辑
-                    processed_inputs = preprocess_data(inputs, device)
+                    processed_inputs = preprocess_data(current_inputs, device)
                     model_outputs = model(processed_inputs)
 
                     # 【核心修复】：检查返回值是否为列表或元组
@@ -427,6 +469,17 @@ def model_ablation(models_dict, compare_dir, test_loader, device):
 
                     # 确保提取后再进行数值缩放
                     outputs_dict[model_name] = model_outputs * 256
+
+                # --- 优化后的 Mask 覆盖逻辑 ---
+                current_data = outputs_dict[model_name].clone()
+                if cars_flag :
+                    for i in range(batch_size):
+                        m = mask[i]
+                        if m.any():  # 只有当存在车时才处理
+                            max_val = current_data[i].max()
+                            current_data[i].masked_fill_(m, max_val)
+
+                outputs_dict_display[model_name] = current_data
 
             # 为每个模型计算指标
             for model_name, outputs in outputs_dict.items():
@@ -457,8 +510,17 @@ def model_ablation(models_dict, compare_dir, test_loader, device):
                 metrics[model_name]['batch_psnr'].append(psnr_batch.item())
                 metrics[model_name]['batch_indices'].append(batch_idx)
 
+            # --- 【修复重点】：处理 targets_display ---
+            targets_display = targets.clone()
+            if cars_flag:
+                for i in range(batch_size):
+                    m = mask[i]
+                    if m.any():
+                        max_val = targets_display[i].max()
+                        # 修复：之前这里错误地写成了 outputs_display[i]
+                        targets_display[i].masked_fill_(m, max_val)
             # 创建多模型对比图
-            create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
+            create_multi_model_comparison(targets_display, outputs_dict_display, batch_idx, compare_dir)
 
     # 绘制指标图并获取平均指标
     avg_metrics = plot_model_comparison_metrics(models_dict, metrics, total_samples, compare_dir)
@@ -516,7 +578,7 @@ def model_ablation_nocars(models_dict, compare_dir, test_loader, device):
     with torch.no_grad():
         # 只测试前20个批次
         for batch_idx, data in enumerate(tqdm(test_loader, desc="Model Comparison", ncols=100, leave=False)):
-            if batch_idx >= 15:
+            if batch_idx >= 20:
                 break
 
             inputs, targets = data
@@ -528,10 +590,14 @@ def model_ablation_nocars(models_dict, compare_dir, test_loader, device):
             # 获取各个模型的输出（核心改造：遍历模型字典）
             outputs_dict = {}
             for model_name, model in models_dict.items():
-                if model_name == "SAUNet_noStatistic":
-                    # SAUnet 专属处理逻辑
+                # 必须使用 clone()，否则第一个模型预处理后会改变 inputs 的值，
+                # 导致后续模型接收到被污染（例如被重复归一化）的数据。
+                current_inputs = inputs.clone()
+
+                if model_name == "w/o-Prior":
+                    # PAUnet 专属处理逻辑
                     target_indices = [0, 1, 2]
-                    processed_inputs = preprocess_data(inputs, device)
+                    processed_inputs = preprocess_data(current_inputs, device)
                     processed_inputs = processed_inputs[:, target_indices, :, :]
                     model_outputs = model(processed_inputs)
 
@@ -543,7 +609,7 @@ def model_ablation_nocars(models_dict, compare_dir, test_loader, device):
                     outputs_dict[model_name] = model_outputs * 256
                 else:
                     # SAUnet 专属处理逻辑
-                    processed_inputs = preprocess_data(inputs, device)
+                    processed_inputs = preprocess_data(current_inputs, device)
                     model_outputs = model(processed_inputs)
 
                     # 【核心修复】：检查返回值是否为列表或元组

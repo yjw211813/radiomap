@@ -30,7 +30,7 @@ def get_UVM_model(base_dir,load_epoch):
     UVM_model.to(device)
     UVM_model.eval()
     UVM_load_epoch = load_epoch
-    UVM_save_dir = base_dir + r"/model_pth/UVM/UVM/"
+    UVM_save_dir = base_dir + r"/model_pth/UVM_cars/"
     UVM_checkpoint_path = os.path.join(UVM_save_dir, f"checkpoint_epoch_{UVM_load_epoch}.pth")
     UVM_checkpoint = torch.load(UVM_checkpoint_path, weights_only=True, map_location=device)
 
@@ -82,9 +82,9 @@ def get_SAUNet_model(base_dir,load_epoch):
 if __name__ == "__main__":
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    train_loader, val_loader, test_loader = get_cars_load()
+    train_loader, val_loader, test_loader = get_cars_load(noise_sigma = 4)
     base_dir = r"/home/code/radioMap/runs"
-    compare_dir = base_dir + r"/model_val_log/compare/"
+    compare_dir = base_dir + r"/model_val_log/compare_cars/"
 
     radioUnet_model = get_radioUnet_model(base_dir, 95)
     UVM_model = get_UVM_model(base_dir, 19)
@@ -92,14 +92,12 @@ if __name__ == "__main__":
     REMGAN_model = get_REM_model(rem_base_dir, 160)
     SAUNet_model = get_SAUNet_model(base_dir, 58)
     models_dict = {
+        "PAUNet": SAUNet_model,
         "radioUnet": radioUnet_model,
         "UVM": UVM_model,
         "REM_GAN": REMGAN_model,
-        "SAUNet": SAUNet_model,
+
 
     }
-    # models_dict = {
-    #     "REM_GAN": REMGAN_model
-    # }
 
-    avg_metrics = model_compare(models_dict, compare_dir, val_loader, device)
+    avg_metrics = model_compare(models_dict, compare_dir, val_loader, device,cars_flag= True)

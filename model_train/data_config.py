@@ -4,9 +4,9 @@ from torch.utils.data import DataLoader
 
 train_batch_size = 16  # 批次大小
 val_batch_size = 16
-test_batch_size = 32  # 批次大小1
+test_batch_size = 16  # 批次大小1
 
-def get_cars_load(formula_flag: bool = True, inter_flag: bool = True):
+def get_cars_load(formula_flag: bool = True, inter_flag: bool = True,noise_sigma: float = 0):
     sample_rate_max = 0.03
     sample_rate_min = 0.005
     num_samples_high = int(256 * 256 * sample_rate_max)
@@ -31,7 +31,8 @@ def get_cars_load(formula_flag: bool = True, inter_flag: bool = True):
         "scale256_flag": True,  # 取值范围是否为0 - 255
         "sample_flag": True,  # 是否有采样输入
         "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
-        "formula_flag": formula_flag
+        "formula_flag": formula_flag,
+        "noise_sigma": noise_sigma  # 噪声标准差
     }
     # 加载数据集
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")
@@ -49,7 +50,7 @@ def get_cars_load(formula_flag: bool = True, inter_flag: bool = True):
 
     return train_loader, val_loader, test_loader
 
-def get_nocars_load(formula_flag: bool = True, inter_flag: bool = True):
+def get_nocars_load(formula_flag: bool = True, inter_flag: bool = True,noise_sigma: float = 0):
     sample_rate_max = 0.03
     sample_rate_min = 0.005
     num_samples_high = int(256 * 256 * sample_rate_max)
@@ -74,7 +75,8 @@ def get_nocars_load(formula_flag: bool = True, inter_flag: bool = True):
         "scale256_flag": True,  # 取值范围是否为0 - 255
         "sample_flag": True,  # 是否有采样输入
         "loss_samples_flag": False,  # 是否定义loss为稀疏采样loss
-        "formula_flag": formula_flag
+        "formula_flag": formula_flag,
+        "noise_sigma": noise_sigma  # 噪声标准差
     }
     # 加载数据集
     Radio_train = RadioMapSeerLoader(simuSetDict, phase="train")

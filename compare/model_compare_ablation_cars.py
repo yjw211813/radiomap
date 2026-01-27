@@ -102,21 +102,21 @@ def get_SAUNet_model(base_dir,load_epoch):
 if __name__ == "__main__":
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    train_loader, val_loader, test_loader = get_cars_load()
+    train_loader, val_loader, test_loader = get_cars_load(noise_sigma = 4)
     base_dir = r"/home/code/radioMap/runs"
     compare_dir = base_dir + r"/model_val_log/compare_ablation_cars/"
     SAUNet_model = get_SAUNet_model(base_dir, 46)
-    SAUNet_nosa = get_SAUNet_nosa_model(base_dir, 20)
-    SAUNet_nofrac = get_SAUNet_nofrac_model(base_dir, 20)
-    SAUNet_noMultiScale = get_SAUNet_noMultiScale_model(base_dir, 20)
-    SAUNet_noStatistic = get_SAUNet_noStatistic_model(base_dir, 20)
+    SAUNet_nosa = get_SAUNet_nosa_model(base_dir, 46)
+    SAUNet_nofrac = get_SAUNet_nofrac_model(base_dir, 14)
+    SAUNet_noMultiScale = get_SAUNet_noMultiScale_model(base_dir, 14)
+    SAUNet_noStatistic = get_SAUNet_noStatistic_model(base_dir, 14)
 
     models_dict = {
-        "SAUNet": SAUNet_model,
-        "SAUNet_nopa": SAUNet_nosa,
-        "SAUNet_nofrac": SAUNet_nofrac,
-        "SAUNet_noMultiScale": SAUNet_noMultiScale,
-        "SAUNet_noStatistic": SAUNet_noStatistic,
+        "FULL": SAUNet_model,
+        "w/o-PAM": SAUNet_nosa,
+        "w/o-fraction": SAUNet_nofrac,
+        "w/o-MultiScale": SAUNet_noMultiScale,
+        "w/o-Prior": SAUNet_noStatistic,
 
     }
 
@@ -124,4 +124,4 @@ if __name__ == "__main__":
     #     "REM_GAN": REMGAN_model
     # }
 
-    avg_metrics = model_ablation(models_dict, compare_dir, val_loader, device)
+    avg_metrics = model_ablation(models_dict, compare_dir, val_loader, device,cars_flag=True)

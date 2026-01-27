@@ -14,12 +14,12 @@ from compare.compare_utils import model_compare
 
 def get_radioUnet_model(base_dir,load_epoch):
     input_channels = 5
-    WNetPhase = "firstU"
+    WNetPhase = "secondU"
     radioUnet_model = RadioWNet(inputs=input_channels, phase=WNetPhase)
     radioUnet_model.to(device)
     radioUnet_model.eval()
     radioUnet_load_epoch = load_epoch
-    radioUnet_save_dir = base_dir + r"/model_pth/RadioUnet_no_cars/"  # 模型存储位置
+    radioUnet_save_dir = base_dir + r"/model_pth/RadioUnet_nocars/"  # 模型存储位置
     radioUnet_checkpoint_path = os.path.join(radioUnet_save_dir,
                                              f"checkpoint_{WNetPhase}_epoch_{radioUnet_load_epoch}.pth")
     radioUnet_checkpoint = torch.load(radioUnet_checkpoint_path, weights_only=True, map_location=device)
@@ -86,19 +86,20 @@ def get_SAUNet_model(base_dir,load_epoch):
 if __name__ == "__main__":
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    train_loader, val_loader, test_loader = get_nocars_load()
+    train_loader, val_loader, test_loader = get_nocars_load(noise_sigma = 4)
     base_dir = r"/home/code/radioMap/runs"
-    compare_dir = base_dir + r"/model_val_log/compare/"
+    compare_dir = base_dir + r"/model_val_log/compare_nocars/"
 
-    radioUnet_model = get_radioUnet_model(base_dir, 66)
+    radioUnet_model = get_radioUnet_model(base_dir, 63)
     UVM_model = get_UVM_model(base_dir, 20)
-    REMGAN_model = get_REM_model(base_dir, 120)
-    SAUNet_model = get_SAUNet_model(base_dir, 24)
+    REMGAN_model = get_REM_model(base_dir, 40)
+    SAUNet_model = get_SAUNet_model(base_dir, 62)
     models_dict = {
+        "PAUNet": SAUNet_model,
         "radioUnet": radioUnet_model,
         "UVM": UVM_model,
         "REM_GAN": REMGAN_model,
-        "SAUNet": SAUNet_model,
+
 
     }
 

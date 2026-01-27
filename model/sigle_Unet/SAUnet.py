@@ -10,7 +10,7 @@ from model.sub_block.mid_conv import inception_ghost_sum,inception_sum
 from model.sub_block.low_conv import multiScaleConvDown,multiScaleUpSample
 from torch.nn import functional as F
 from model.sub_block.statistic_tools import gpu_statistic
-
+from torchsummary  import summary
 class Swish(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
@@ -174,7 +174,7 @@ class SAUnet(nn.Module):
 def SAUnet_test():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     get_gpu_info = gpu_statistic(device)
-    batch_size = 8
+    batch_size = 16
     img_H = 256
     img_W = 256
     input_data = torch.randn(batch_size, 6, img_H, img_W).to(device)
@@ -185,7 +185,7 @@ def SAUnet_test():
     model = SAUnet(BTM_ghost_UNet_input_shape, BTM_ghost_UNet_output_shape,C_down_list).to(device)
     x = input_data
     get_gpu_info.print_gpu_memory("Conv3x3_DownSample GPU info", x, model)
-
+    summary(model, input_size=(6, 256, 256),device = "cuda")
 
 
 if __name__ == '__main__':

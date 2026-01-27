@@ -11,7 +11,7 @@ if __name__ == '__main__':
     device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
 
-    train_loader, val_loader, test_loader =  get_nocars_load()
+    train_loader, val_loader, test_loader =  get_nocars_load(noise_sigma = 4)
     base_dir = r"/home/code/radioMap/runs/"
     log_dir = base_dir + r'model_log/SAUnet_nocars/'# log 存储位置
     model_load_dir = base_dir + r"model_pth/SAUnet_nocars/"# 模型加载目录
@@ -28,9 +28,9 @@ if __name__ == '__main__':
     model = SAUnet(input_shape = input_shape,output_shape= output_shape,C_down_list=C_down_list)
 
     # 定义训练对象
-    warmup_epochs = 5
+    warmup_epochs = 10
     total_epoch = 100
-    start_epoch = 3
+    start_epoch = 34
 
     app = SAUnet_app(start_epoch,log_dir,warmup_epochs,model_save_dir,device)
     load_epoch = 0
