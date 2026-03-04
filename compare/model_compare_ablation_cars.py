@@ -3,7 +3,6 @@ from model.UVM.UVM_model import UVMNet
 import os
 from model.radioUnet.RadioUnetModel import RadioWNet
 from model.rem_gan import modules
-from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
 from model.sigle_Unet.SAUnet import SAUnet
 from model.sigle_Unet.SAUnet_NoSA import SAUnetNoSA
 from model.sigle_Unet.SAUnet_nofrac import SAUnet_nofrac
@@ -107,9 +106,9 @@ if __name__ == "__main__":
     compare_dir = base_dir + r"/model_val_log/compare_ablation_cars/"
     SAUNet_model = get_SAUNet_model(base_dir, 46)
     SAUNet_nosa = get_SAUNet_nosa_model(base_dir, 46)
-    SAUNet_nofrac = get_SAUNet_nofrac_model(base_dir, 14)
-    SAUNet_noMultiScale = get_SAUNet_noMultiScale_model(base_dir, 14)
-    SAUNet_noStatistic = get_SAUNet_noStatistic_model(base_dir, 14)
+    SAUNet_nofrac = get_SAUNet_nofrac_model(base_dir, 41)
+    SAUNet_noMultiScale = get_SAUNet_noMultiScale_model(base_dir, 41)
+    SAUNet_noStatistic = get_SAUNet_noStatistic_model(base_dir, 87)
 
     models_dict = {
         "FULL": SAUNet_model,

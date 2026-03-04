@@ -13,7 +13,6 @@ from torchmetrics.functional import peak_signal_noise_ratio as psnr
 from torchmetrics.functional import structural_similarity_index_measure as ssim
 import torchvision
 from model.rem_gan import modules
-from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
 import numpy as np
 import pandas as pd
 from model.sigle_Unet.simple_CNN import SAUnetForProcess
@@ -22,6 +21,7 @@ from model_app.SAUnet_app import preprocess_data
 from model_train.data_config import get_cars_load, get_nocars_load
 from model.sigle_Unet.SAUnet_NoSA import SAUnetNoSA
 from model.sigle_Unet.SAUnet_v0 import SAUnet_old
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir):
@@ -110,7 +110,6 @@ def create_multi_model_comparison(targets, outputs_dict, batch_idx, compare_dir)
 
         plt.savefig(save_path, dpi=200, bbox_inches='tight')
         plt.close(fig)
-
 
 def plot_model_comparison_metrics(models, metrics, total_samples, compare_dir, figsize=(18, 12), dpi=300):
     """

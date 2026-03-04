@@ -6,7 +6,7 @@ import os
 from model_train.data_config import get_cars_load
 
 if __name__ == '__main__':
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float32)
     base_dir = r"/home/code/radioMap/runs/"
 

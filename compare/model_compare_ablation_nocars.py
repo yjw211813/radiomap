@@ -3,7 +3,7 @@ from model.UVM.UVM_model import UVMNet
 import os
 from model.radioUnet.RadioUnetModel import RadioWNet
 from model.rem_gan import modules
-from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
+
 from model.sigle_Unet.SAUnet import SAUnet
 from model.sigle_Unet.SAUnet_NoSA import SAUnetNoSA
 from model.sigle_Unet.SAUnet_nofrac import SAUnet_nofrac

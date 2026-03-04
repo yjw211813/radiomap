@@ -5,7 +5,7 @@ import os
 from model.radioUnet.RadioUnetModel import RadioWNet
 
 from model.rem_gan import modules
-from model.rem_gan.EncoderModels import ResnetGenerator, Discriminator
+from model.rem_gan.EncoderModels import  Discriminator
 from model.sigle_Unet.SAUnet import SAUnet
 from model_train.data_config import get_cars_load, get_nocars_load
 from model.sigle_Unet.SAUnet_NoSA import SAUnetNoSA
